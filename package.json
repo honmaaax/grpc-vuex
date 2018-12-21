@@ -1,0 +1,48 @@
+{
+  "name": "grpc-vuex",
+  "version": "0.0.1",
+  "description": "JavaScript (Vuex) code generator with grpc-web",
+  "bin": {
+    "grpc-vuex": "bin/grpc-vuex.sh"
+  },
+  "scripts": {
+    "start": "webpack",
+    "build": "webpack",
+    "build:watch": "webpack --watch",
+    "test": "jest"
+  },
+  "main": "index.js",
+  "repository": "git@github.com:honmaaax/grpc-vuex.git",
+  "bugs": {
+    "url": "https://github.com/honmaaax/grpc-vuex/issues"
+  },
+  "homepage": "https://github.com/honmaaax/grpc-vuex#readme",
+  "keywords": [
+    "grpc",
+    "grpc-web",
+    "proto",
+    "protobuf",
+    "protocolbuffers",
+    "vue",
+    "vuex",
+    "javascript"
+  ],
+  "author": "honmaaax",
+  "license": "MIT",
+  "private": false,
+  "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-jest": "^23.6.0",
+    "babel-preset-env": "^1.7.0",
+    "jest": "^23.6.0",
+    "webpack": "^4.24.0",
+    "webpack-cli": "^3.1.2"
+  },
+  "dependencies": {
+    "bluebird": "^3.5.2",
+    "case": "^1.5.5",
+    "commander": "^2.19.0",
+    "js-yaml": "^3.12.0",
+    "lodash": "^4.17.11"
+  }
+}
