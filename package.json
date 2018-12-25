@@ -8,7 +8,7 @@
   "scripts": {
     "start": "webpack",
     "build": "webpack",
-    "build:watch": "webpack --watch",
+    "watch": "webpack --watch",
     "test": "jest"
   },
   "main": "index.js",
@@ -42,7 +42,9 @@
     "bluebird": "^3.5.2",
     "case": "^1.5.5",
     "commander": "^2.19.0",
+    "grpc-web": "^1.0.3",
     "js-yaml": "^3.12.0",
-    "lodash": "^4.17.11"
+    "lodash": "^4.17.11",
+    "protobufjs": "^6.8.8"
   }
 }
