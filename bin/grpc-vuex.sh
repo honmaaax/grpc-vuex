@@ -33465,25 +33465,42 @@ function revertNames(res, schemas, schema, types) {
   }
 }
 // CONCATENATED MODULE: ./src/generator.js
-function generate ({ mutationTypes, actions, messages, host }) {
-  return `import GRPC from './grpc'
 
-export const types = {
-${mutationTypes.map((type)=>`  ${type}: '${type}',`).join('\n')}
+
+function generateImportCode () {
+  return `import GRPC from './grpc'`
 }
 
-export const grpc = new GRPC({ host: ${host} })
-${actions.map(({ name, client, method, message, mutationType })=>`
+function generateMutationTypesCode (mutationTypes) {
+  return lodash_default.a.chain(mutationTypes)
+    .clone()
+    .map((type)=>`  ${type}: '${type}',`)
+    .unshift('export const types = {')
+    .push('}')
+    .join('\n')
+    .value()
+}
+
+function generateInitGrpcCode (host) {
+  return `export const grpc = new GRPC({ host: ${host} })`
+}
+
+function generateRequestCode () {
+return `const users = [0].map(()=>{
+  const r = new HelloRequest.User()
+  r.setName('puyo')
+  r.setAge(999)
+  r.setChildrenList(['uuu'])
+  return r
+})
+req.setUsersList(users)`
+}
+
+function generateActionsCode () {
+  actions.map(({ name, client, method, message, mutationType })=>`
 export function ${name} (params, options) {
   const req = new HelloRequest()
-  const users = [0].map(()=>{
-    const r = new HelloRequest.User()
-    r.setName('puyo')
-    r.setAge(999)
-    r.setChildrenList(['uuu'])
-    return r
-  })
-  req.setUsersList(users)
+  ${generateRequestCode(message)}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -33494,13 +33511,17 @@ export function ${name} (params, options) {
       if (options && options.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
+}`).join('\n\n')
 }
-`).join('')}
+
+function generateCode ({ mutationTypes, actions, messages, host }) {
+  return `${generateImportCode()}
+
+${generateMutationTypesCode(mutationTypes)}
+
+${generateInitGrpcCode(host)}
+${generateActionsCode(actions)}
 `
-}
-
-function generateRequest () {
-
 }
 // CONCATENATED MODULE: ./src/index.js
 
@@ -33556,7 +33577,7 @@ readFile(protoFilePath)
       host: 'http://localhost:8080/',
     }
   })
-  .then(generate)
+  .then(/* Cannot get final name for export "generate" in "./src/generator.js" (known exports: generateImportCode generateMutationTypesCode generateInitGrpcCode generateRequestCode generateActionsCode generateCode, known reexports: ) */ undefined)
   .then((generatedCode)=>{
     console.log(generatedCode)
     console.log('Finished!')

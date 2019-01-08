@@ -142,10 +142,12 @@ describe('getMutationTypes', ()=>{
 describe('getActions', ()=>{
   let actions = []
   beforeAll(()=>{
-    actions = getActions(toJSON(proto))
+    const services = getServices(toJSON(proto))
+    actions = getActions(services)
   })
   it('returns array', () => {
     expect(_.isArray(actions)).toBeTruthy()
+    expect(_.size(actions)).toBe(1)
   })
 })
 
