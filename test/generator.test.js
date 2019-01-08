@@ -70,7 +70,8 @@ describe('generateInitGrpcCode', ()=>{
 
 describe('generateRequestCode', ()=>{
   it('returns js code', () => {
-    const code = generateRequestCode()
+    const messages = getMessages(toJSON(proto))
+    const code = generateRequestCode('HelloRequest', messages)
     expect(code).toBe(
 `const req = new HelloRequest()
   const users = [0].map(()=>{
@@ -89,8 +90,9 @@ describe('generateActionsCode', ()=>{
   it('returns js code', () => {
     const json = toJSON(proto)
     const services = getServices(json)
+    const messages = getMessages(json)
     const actions = getActions(services)
-    const code = generateActionsCode(actions)
+    const code = generateActionsCode(actions, messages)
     expect(code).toBe(
 `export function sayHello (params, options) {
   const req = new HelloRequest()
@@ -121,11 +123,13 @@ describe('generateCode', ()=>{
   it('returns js code', () => {
     const json = toJSON(proto)
     const services = getServices(json)
+    const messages = getMessages(json)
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services)
     const code = generateCode({
       mutationTypes,
       actions,
+      messages,
       host: 'http://localhost:8080/',
     })
     expect(_.isString(code)).toBeTruthy()

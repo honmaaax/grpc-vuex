@@ -18,10 +18,10 @@ export function generateInitGrpcCode (host) {
   return `export const grpc = new GRPC({ host: ${host} })`
 }
 
-export function generateRequestCode () {
-  return `const req = new HelloRequest()
+export function generateRequestCode (name, message) {
+  return `const req = new ${name}()
   const users = [0].map(()=>{
-    const r = new HelloRequest.User()
+    const r = new ${name}.User()
     r.setName('puyo')
     r.setAge(999)
     r.setChildrenList(['uuu'])
@@ -30,10 +30,10 @@ export function generateRequestCode () {
   req.setUsersList(users)`
 }
 
-export function generateActionsCode (actions) {
+export function generateActionsCode (actions, messages) {
   return actions.map(({ name, client, method, message, mutationType })=>
 `export function ${name} (params, options) {
-  ${generateRequestCode(message)}
+  ${generateRequestCode(message, messages[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -48,12 +48,12 @@ export function generateActionsCode (actions) {
   ).join('\n\n')
 }
 
-export function generateCode ({ mutationTypes, actions, host }) {
+export function generateCode ({ mutationTypes, actions, messages, host }) {
   return `${generateImportCode()}
 
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(host)}
-${generateActionsCode(actions)}
+${generateActionsCode(actions, messages)}
 `
 }
