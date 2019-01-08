@@ -1,9 +1,20 @@
 import _ from 'lodash'
 import protobuf from 'protobufjs'
 
-export function toJSON(proto) {
+export function getRoot(proto) {
   const { root } = protobuf.parse(proto)
-  return root.toJSON()
+  return root
+}
+
+export function toJSON(proto) {
+  return getRoot(proto).toJSON()
+}
+
+export function fromJSON(json) {
+  console.log('protobuf=', protobuf)
+  const message = new protobuf.Message()
+  console.log('message=', message)
+  return message.fromObject(message)
 }
 
 export function getServices(json) {

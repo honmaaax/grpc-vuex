@@ -1,12 +1,14 @@
 import program from 'commander'
 import _ from 'lodash'
+import Case from 'case'
 
 import { readFile } from './file'
 import { toJSON, getServices, getMessages, revertNames } from './protobuf'
+import { generate } from './generator'
 
 program
-  .usage('<input_file_path> <output_file_path>')
-  .arguments('<input_file_path> <output_file_path>')
+  .usage('<proto_file_path> <output_dir>')
+  .arguments('<proto_file_path> <output_dir>')
   .parse(process.argv)
 if (
   !_.isArray(program.args) ||
@@ -14,11 +16,44 @@ if (
 ) {
   throw new Error('Undefined file paths')
 }
-const [ inputFilePath, outputFilePath ] = program.args
-readFile(inputFilePath)
+const [ protoFilePath, outputDir ] = program.args
+readFile(protoFilePath)
   .then(toJSON)
   .then((json)=>{
-    console.log('json=', json)
+    const services = getServices(json)
+    const messages = getMessages(json)
+    const mutationTypes = _.chain(services)
+      .map(({ methods }, serviceName)=>{
+        return _.map(methods, (value, methodName)=>`${serviceName}-${methodName}`)
+      })
+      .flatten()
+      .map(Case.constant)
+      .value()
+    const actions = _.chain(services)
+      .map(({ methods }, serviceName)=>{
+        return _.map(methods, ({ requestType }, methodName)=>{
+          const name = Case.camel(methodName)
+          return {
+            name,
+            client: `${serviceName}PromiseClient`,
+            method: name,
+            message: requestType,
+            mutationType: Case.constant(`${serviceName}-${methodName}`),
+          }
+        })
+      })
+      .flatten()
+      .value()
+    return {
+      mutationTypes,
+      actions,
+      messages,
+      host: 'http://localhost:8080/',
+    }
+  })
+  .then(generate)
+  .then((generatedCode)=>{
+    console.log(generatedCode)
     console.log('Finished!')
   })
   .catch((err)=>console.error(err))

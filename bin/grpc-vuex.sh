@@ -82,1240 +82,398 @@
 /******/
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 76);
+/******/ 	return __webpack_require__(__webpack_require__.s = 89);
 /******/ })
 /************************************************************************/
 /******/ ([
 /* 0 */
 /***/ (function(module, exports, __webpack_require__) {
 
-/**
- * Module dependencies.
- */
+"use strict";
 
-var EventEmitter = __webpack_require__(3).EventEmitter;
-var spawn = __webpack_require__(4).spawn;
-var path = __webpack_require__(5);
-var dirname = path.dirname;
-var basename = path.basename;
-var fs = __webpack_require__(6);
+var es5 = __webpack_require__(6);
+var canEvaluate = typeof navigator == "undefined";
 
-/**
- * Inherit `Command` from `EventEmitter.prototype`.
- */
+var errorObj = {e: {}};
+var tryCatchTarget;
+var globalObject = typeof self !== "undefined" ? self :
+    typeof window !== "undefined" ? window :
+    typeof global !== "undefined" ? global :
+    this !== undefined ? this : null;
 
-__webpack_require__(7).inherits(Command, EventEmitter);
-
-/**
- * Expose the root command.
- */
-
-exports = module.exports = new Command();
-
-/**
- * Expose `Command`.
- */
-
-exports.Command = Command;
-
-/**
- * Expose `Option`.
- */
-
-exports.Option = Option;
-
-/**
- * Initialize a new `Option` with the given `flags` and `description`.
- *
- * @param {String} flags
- * @param {String} description
- * @api public
- */
-
-function Option(flags, description) {
-  this.flags = flags;
-  this.required = flags.indexOf('<') >= 0;
-  this.optional = flags.indexOf('[') >= 0;
-  this.bool = flags.indexOf('-no-') === -1;
-  flags = flags.split(/[ ,|]+/);
-  if (flags.length > 1 && !/^[[<]/.test(flags[1])) this.short = flags.shift();
-  this.long = flags.shift();
-  this.description = description || '';
+function tryCatcher() {
+    try {
+        var target = tryCatchTarget;
+        tryCatchTarget = null;
+        return target.apply(this, arguments);
+    } catch (e) {
+        errorObj.e = e;
+        return errorObj;
+    }
+}
+function tryCatch(fn) {
+    tryCatchTarget = fn;
+    return tryCatcher;
 }
 
-/**
- * Return option name.
- *
- * @return {String}
- * @api private
- */
+var inherits = function(Child, Parent) {
+    var hasProp = {}.hasOwnProperty;
 
-Option.prototype.name = function() {
-  return this.long
-    .replace('--', '')
-    .replace('no-', '');
+    function T() {
+        this.constructor = Child;
+        this.constructor$ = Parent;
+        for (var propertyName in Parent.prototype) {
+            if (hasProp.call(Parent.prototype, propertyName) &&
+                propertyName.charAt(propertyName.length-1) !== "$"
+           ) {
+                this[propertyName + "$"] = Parent.prototype[propertyName];
+            }
+        }
+    }
+    T.prototype = Parent.prototype;
+    Child.prototype = new T();
+    return Child.prototype;
 };
 
-/**
- * Return option name, in a camelcase format that can be used
- * as a object attribute key.
- *
- * @return {String}
- * @api private
- */
 
-Option.prototype.attributeName = function() {
-  return camelcase(this.name());
-};
+function isPrimitive(val) {
+    return val == null || val === true || val === false ||
+        typeof val === "string" || typeof val === "number";
 
-/**
- * Check if `arg` matches the short or long flag.
- *
- * @param {String} arg
- * @return {Boolean}
- * @api private
- */
-
-Option.prototype.is = function(arg) {
-  return this.short === arg || this.long === arg;
-};
-
-/**
- * Initialize a new `Command`.
- *
- * @param {String} name
- * @api public
- */
-
-function Command(name) {
-  this.commands = [];
-  this.options = [];
-  this._execs = {};
-  this._allowUnknownOption = false;
-  this._args = [];
-  this._name = name || '';
 }
 
-/**
- * Add command `name`.
- *
- * The `.action()` callback is invoked when the
- * command `name` is specified via __ARGV__,
- * and the remaining arguments are applied to the
- * function for access.
- *
- * When the `name` is "*" an un-matched command
- * will be passed as the first arg, followed by
- * the rest of __ARGV__ remaining.
- *
- * Examples:
- *
- *      program
- *        .version('0.0.1')
- *        .option('-C, --chdir <path>', 'change the working directory')
- *        .option('-c, --config <path>', 'set config path. defaults to ./deploy.conf')
- *        .option('-T, --no-tests', 'ignore test hook')
- *
- *      program
- *        .command('setup')
- *        .description('run remote setup commands')
- *        .action(function() {
- *          console.log('setup');
- *        });
- *
- *      program
- *        .command('exec <cmd>')
- *        .description('run the given remote command')
- *        .action(function(cmd) {
- *          console.log('exec "%s"', cmd);
- *        });
- *
- *      program
- *        .command('teardown <dir> [otherDirs...]')
- *        .description('run teardown commands')
- *        .action(function(dir, otherDirs) {
- *          console.log('dir "%s"', dir);
- *          if (otherDirs) {
- *            otherDirs.forEach(function (oDir) {
- *              console.log('dir "%s"', oDir);
- *            });
- *          }
- *        });
- *
- *      program
- *        .command('*')
- *        .description('deploy the given env')
- *        .action(function(env) {
- *          console.log('deploying "%s"', env);
- *        });
- *
- *      program.parse(process.argv);
-  *
- * @param {String} name
- * @param {String} [desc] for git-style sub-commands
- * @return {Command} the new command
- * @api public
- */
+function isObject(value) {
+    return typeof value === "function" ||
+           typeof value === "object" && value !== null;
+}
 
-Command.prototype.command = function(name, desc, opts) {
-  if (typeof desc === 'object' && desc !== null) {
-    opts = desc;
-    desc = null;
-  }
-  opts = opts || {};
-  var args = name.split(/ +/);
-  var cmd = new Command(args.shift());
+function maybeWrapAsError(maybeError) {
+    if (!isPrimitive(maybeError)) return maybeError;
 
-  if (desc) {
-    cmd.description(desc);
-    this.executables = true;
-    this._execs[cmd._name] = true;
-    if (opts.isDefault) this.defaultExecutable = cmd._name;
-  }
-  cmd._noHelp = !!opts.noHelp;
-  this.commands.push(cmd);
-  cmd.parseExpectedArgs(args);
-  cmd.parent = this;
+    return new Error(safeToString(maybeError));
+}
 
-  if (desc) return this;
-  return cmd;
-};
+function withAppended(target, appendee) {
+    var len = target.length;
+    var ret = new Array(len + 1);
+    var i;
+    for (i = 0; i < len; ++i) {
+        ret[i] = target[i];
+    }
+    ret[i] = appendee;
+    return ret;
+}
 
-/**
- * Define argument syntax for the top-level command.
- *
- * @api public
- */
+function getDataPropertyOrDefault(obj, key, defaultValue) {
+    if (es5.isES5) {
+        var desc = Object.getOwnPropertyDescriptor(obj, key);
 
-Command.prototype.arguments = function(desc) {
-  return this.parseExpectedArgs(desc.split(/ +/));
-};
+        if (desc != null) {
+            return desc.get == null && desc.set == null
+                    ? desc.value
+                    : defaultValue;
+        }
+    } else {
+        return {}.hasOwnProperty.call(obj, key) ? obj[key] : undefined;
+    }
+}
 
-/**
- * Add an implicit `help [cmd]` subcommand
- * which invokes `--help` for the given command.
- *
- * @api private
- */
-
-Command.prototype.addImplicitHelpCommand = function() {
-  this.command('help [cmd]', 'display help for [cmd]');
-};
-
-/**
- * Parse expected `args`.
- *
- * For example `["[type]"]` becomes `[{ required: false, name: 'type' }]`.
- *
- * @param {Array} args
- * @return {Command} for chaining
- * @api public
- */
-
-Command.prototype.parseExpectedArgs = function(args) {
-  if (!args.length) return;
-  var self = this;
-  args.forEach(function(arg) {
-    var argDetails = {
-      required: false,
-      name: '',
-      variadic: false
+function notEnumerableProp(obj, name, value) {
+    if (isPrimitive(obj)) return obj;
+    var descriptor = {
+        value: value,
+        configurable: true,
+        enumerable: false,
+        writable: true
     };
-
-    switch (arg[0]) {
-      case '<':
-        argDetails.required = true;
-        argDetails.name = arg.slice(1, -1);
-        break;
-      case '[':
-        argDetails.name = arg.slice(1, -1);
-        break;
-    }
-
-    if (argDetails.name.length > 3 && argDetails.name.slice(-3) === '...') {
-      argDetails.variadic = true;
-      argDetails.name = argDetails.name.slice(0, -3);
-    }
-    if (argDetails.name) {
-      self._args.push(argDetails);
-    }
-  });
-  return this;
-};
-
-/**
- * Register callback `fn` for the command.
- *
- * Examples:
- *
- *      program
- *        .command('help')
- *        .description('display verbose help')
- *        .action(function() {
- *           // output help here
- *        });
- *
- * @param {Function} fn
- * @return {Command} for chaining
- * @api public
- */
-
-Command.prototype.action = function(fn) {
-  var self = this;
-  var listener = function(args, unknown) {
-    // Parse any so-far unknown options
-    args = args || [];
-    unknown = unknown || [];
-
-    var parsed = self.parseOptions(unknown);
-
-    // Output help if necessary
-    outputHelpIfNecessary(self, parsed.unknown);
-
-    // If there are still any unknown options, then we simply
-    // die, unless someone asked for help, in which case we give it
-    // to them, and then we die.
-    if (parsed.unknown.length > 0) {
-      self.unknownOption(parsed.unknown[0]);
-    }
-
-    // Leftover arguments need to be pushed back. Fixes issue #56
-    if (parsed.args.length) args = parsed.args.concat(args);
-
-    self._args.forEach(function(arg, i) {
-      if (arg.required && args[i] == null) {
-        self.missingArgument(arg.name);
-      } else if (arg.variadic) {
-        if (i !== self._args.length - 1) {
-          self.variadicArgNotLast(arg.name);
-        }
-
-        args[i] = args.splice(i);
-      }
-    });
-
-    // Always append ourselves to the end of the arguments,
-    // to make sure we match the number of arguments the user
-    // expects
-    if (self._args.length) {
-      args[self._args.length] = self;
-    } else {
-      args.push(self);
-    }
-
-    fn.apply(self, args);
-  };
-  var parent = this.parent || this;
-  var name = parent === this ? '*' : this._name;
-  parent.on('command:' + name, listener);
-  if (this._alias) parent.on('command:' + this._alias, listener);
-  return this;
-};
-
-/**
- * Define option with `flags`, `description` and optional
- * coercion `fn`.
- *
- * The `flags` string should contain both the short and long flags,
- * separated by comma, a pipe or space. The following are all valid
- * all will output this way when `--help` is used.
- *
- *    "-p, --pepper"
- *    "-p|--pepper"
- *    "-p --pepper"
- *
- * Examples:
- *
- *     // simple boolean defaulting to false
- *     program.option('-p, --pepper', 'add pepper');
- *
- *     --pepper
- *     program.pepper
- *     // => Boolean
- *
- *     // simple boolean defaulting to true
- *     program.option('-C, --no-cheese', 'remove cheese');
- *
- *     program.cheese
- *     // => true
- *
- *     --no-cheese
- *     program.cheese
- *     // => false
- *
- *     // required argument
- *     program.option('-C, --chdir <path>', 'change the working directory');
- *
- *     --chdir /tmp
- *     program.chdir
- *     // => "/tmp"
- *
- *     // optional argument
- *     program.option('-c, --cheese [type]', 'add cheese [marble]');
- *
- * @param {String} flags
- * @param {String} description
- * @param {Function|*} [fn] or default
- * @param {*} [defaultValue]
- * @return {Command} for chaining
- * @api public
- */
-
-Command.prototype.option = function(flags, description, fn, defaultValue) {
-  var self = this,
-    option = new Option(flags, description),
-    oname = option.name(),
-    name = option.attributeName();
-
-  // default as 3rd arg
-  if (typeof fn !== 'function') {
-    if (fn instanceof RegExp) {
-      var regex = fn;
-      fn = function(val, def) {
-        var m = regex.exec(val);
-        return m ? m[0] : def;
-      };
-    } else {
-      defaultValue = fn;
-      fn = null;
-    }
-  }
-
-  // preassign default value only for --no-*, [optional], or <required>
-  if (!option.bool || option.optional || option.required) {
-    // when --no-* we make sure default is true
-    if (!option.bool) defaultValue = true;
-    // preassign only if we have a default
-    if (defaultValue !== undefined) {
-      self[name] = defaultValue;
-      option.defaultValue = defaultValue;
-    }
-  }
-
-  // register the option
-  this.options.push(option);
-
-  // when it's passed assign the value
-  // and conditionally invoke the callback
-  this.on('option:' + oname, function(val) {
-    // coercion
-    if (val !== null && fn) {
-      val = fn(val, self[name] === undefined ? defaultValue : self[name]);
-    }
-
-    // unassigned or bool
-    if (typeof self[name] === 'boolean' || typeof self[name] === 'undefined') {
-      // if no value, bool true, and we have a default, then use it!
-      if (val == null) {
-        self[name] = option.bool
-          ? defaultValue || true
-          : false;
-      } else {
-        self[name] = val;
-      }
-    } else if (val !== null) {
-      // reassign
-      self[name] = val;
-    }
-  });
-
-  return this;
-};
-
-/**
- * Allow unknown options on the command line.
- *
- * @param {Boolean} arg if `true` or omitted, no error will be thrown
- * for unknown options.
- * @api public
- */
-Command.prototype.allowUnknownOption = function(arg) {
-  this._allowUnknownOption = arguments.length === 0 || arg;
-  return this;
-};
-
-/**
- * Parse `argv`, settings options and invoking commands when defined.
- *
- * @param {Array} argv
- * @return {Command} for chaining
- * @api public
- */
-
-Command.prototype.parse = function(argv) {
-  // implicit help
-  if (this.executables) this.addImplicitHelpCommand();
-
-  // store raw args
-  this.rawArgs = argv;
-
-  // guess name
-  this._name = this._name || basename(argv[1], '.js');
-
-  // github-style sub-commands with no sub-command
-  if (this.executables && argv.length < 3 && !this.defaultExecutable) {
-    // this user needs help
-    argv.push('--help');
-  }
-
-  // process argv
-  var parsed = this.parseOptions(this.normalize(argv.slice(2)));
-  var args = this.args = parsed.args;
-
-  var result = this.parseArgs(this.args, parsed.unknown);
-
-  // executable sub-commands
-  var name = result.args[0];
-
-  var aliasCommand = null;
-  // check alias of sub commands
-  if (name) {
-    aliasCommand = this.commands.filter(function(command) {
-      return command.alias() === name;
-    })[0];
-  }
-
-  if (this._execs[name] && typeof this._execs[name] !== 'function') {
-    return this.executeSubCommand(argv, args, parsed.unknown);
-  } else if (aliasCommand) {
-    // is alias of a subCommand
-    args[0] = aliasCommand._name;
-    return this.executeSubCommand(argv, args, parsed.unknown);
-  } else if (this.defaultExecutable) {
-    // use the default subcommand
-    args.unshift(this.defaultExecutable);
-    return this.executeSubCommand(argv, args, parsed.unknown);
-  }
-
-  return result;
-};
-
-/**
- * Execute a sub-command executable.
- *
- * @param {Array} argv
- * @param {Array} args
- * @param {Array} unknown
- * @api private
- */
-
-Command.prototype.executeSubCommand = function(argv, args, unknown) {
-  args = args.concat(unknown);
-
-  if (!args.length) this.help();
-  if (args[0] === 'help' && args.length === 1) this.help();
-
-  // <cmd> --help
-  if (args[0] === 'help') {
-    args[0] = args[1];
-    args[1] = '--help';
-  }
-
-  // executable
-  var f = argv[1];
-  // name of the subcommand, link `pm-install`
-  var bin = basename(f, path.extname(f)) + '-' + args[0];
-
-  // In case of globally installed, get the base dir where executable
-  //  subcommand file should be located at
-  var baseDir,
-    link = fs.lstatSync(f).isSymbolicLink() ? fs.readlinkSync(f) : f;
-
-  // when symbolink is relative path
-  if (link !== f && link.charAt(0) !== '/') {
-    link = path.join(dirname(f), link);
-  }
-  baseDir = dirname(link);
-
-  // prefer local `./<bin>` to bin in the $PATH
-  var localBin = path.join(baseDir, bin);
-
-  // whether bin file is a js script with explicit `.js` or `.ts` extension
-  var isExplicitJS = false;
-  if (exists(localBin + '.js')) {
-    bin = localBin + '.js';
-    isExplicitJS = true;
-  } else if (exists(localBin + '.ts')) {
-    bin = localBin + '.ts';
-    isExplicitJS = true;
-  } else if (exists(localBin)) {
-    bin = localBin;
-  }
-
-  args = args.slice(1);
-
-  var proc;
-  if (process.platform !== 'win32') {
-    if (isExplicitJS) {
-      args.unshift(bin);
-      // add executable arguments to spawn
-      args = (process.execArgv || []).concat(args);
-
-      proc = spawn(process.argv[0], args, { stdio: 'inherit', customFds: [0, 1, 2] });
-    } else {
-      proc = spawn(bin, args, { stdio: 'inherit', customFds: [0, 1, 2] });
-    }
-  } else {
-    args.unshift(bin);
-    proc = spawn(process.execPath, args, { stdio: 'inherit' });
-  }
-
-  var signals = ['SIGUSR1', 'SIGUSR2', 'SIGTERM', 'SIGINT', 'SIGHUP'];
-  signals.forEach(function(signal) {
-    process.on(signal, function() {
-      if (proc.killed === false && proc.exitCode === null) {
-        proc.kill(signal);
-      }
-    });
-  });
-  proc.on('close', process.exit.bind(process));
-  proc.on('error', function(err) {
-    if (err.code === 'ENOENT') {
-      console.error('error: %s(1) does not exist, try --help', bin);
-    } else if (err.code === 'EACCES') {
-      console.error('error: %s(1) not executable. try chmod or run with root', bin);
-    }
-    process.exit(1);
-  });
-
-  // Store the reference to the child process
-  this.runningCommand = proc;
-};
-
-/**
- * Normalize `args`, splitting joined short flags. For example
- * the arg "-abc" is equivalent to "-a -b -c".
- * This also normalizes equal sign and splits "--abc=def" into "--abc def".
- *
- * @param {Array} args
- * @return {Array}
- * @api private
- */
-
-Command.prototype.normalize = function(args) {
-  var ret = [],
-    arg,
-    lastOpt,
-    index;
-
-  for (var i = 0, len = args.length; i < len; ++i) {
-    arg = args[i];
-    if (i > 0) {
-      lastOpt = this.optionFor(args[i - 1]);
-    }
-
-    if (arg === '--') {
-      // Honor option terminator
-      ret = ret.concat(args.slice(i));
-      break;
-    } else if (lastOpt && lastOpt.required) {
-      ret.push(arg);
-    } else if (arg.length > 1 && arg[0] === '-' && arg[1] !== '-') {
-      arg.slice(1).split('').forEach(function(c) {
-        ret.push('-' + c);
-      });
-    } else if (/^--/.test(arg) && ~(index = arg.indexOf('='))) {
-      ret.push(arg.slice(0, index), arg.slice(index + 1));
-    } else {
-      ret.push(arg);
-    }
-  }
-
-  return ret;
-};
-
-/**
- * Parse command `args`.
- *
- * When listener(s) are available those
- * callbacks are invoked, otherwise the "*"
- * event is emitted and those actions are invoked.
- *
- * @param {Array} args
- * @return {Command} for chaining
- * @api private
- */
-
-Command.prototype.parseArgs = function(args, unknown) {
-  var name;
-
-  if (args.length) {
-    name = args[0];
-    if (this.listeners('command:' + name).length) {
-      this.emit('command:' + args.shift(), args, unknown);
-    } else {
-      this.emit('command:*', args);
-    }
-  } else {
-    outputHelpIfNecessary(this, unknown);
-
-    // If there were no args and we have unknown options,
-    // then they are extraneous and we need to error.
-    if (unknown.length > 0) {
-      this.unknownOption(unknown[0]);
-    }
-    if (this.commands.length === 0 &&
-        this._args.filter(function(a) { return a.required }).length === 0) {
-      this.emit('command:*');
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return an option matching `arg` if any.
- *
- * @param {String} arg
- * @return {Option}
- * @api private
- */
-
-Command.prototype.optionFor = function(arg) {
-  for (var i = 0, len = this.options.length; i < len; ++i) {
-    if (this.options[i].is(arg)) {
-      return this.options[i];
-    }
-  }
-};
-
-/**
- * Parse options from `argv` returning `argv`
- * void of these options.
- *
- * @param {Array} argv
- * @return {Array}
- * @api public
- */
-
-Command.prototype.parseOptions = function(argv) {
-  var args = [],
-    len = argv.length,
-    literal,
-    option,
-    arg;
-
-  var unknownOptions = [];
-
-  // parse options
-  for (var i = 0; i < len; ++i) {
-    arg = argv[i];
-
-    // literal args after --
-    if (literal) {
-      args.push(arg);
-      continue;
-    }
-
-    if (arg === '--') {
-      literal = true;
-      continue;
-    }
-
-    // find matching Option
-    option = this.optionFor(arg);
-
-    // option is defined
-    if (option) {
-      // requires arg
-      if (option.required) {
-        arg = argv[++i];
-        if (arg == null) return this.optionMissingArgument(option);
-        this.emit('option:' + option.name(), arg);
-      // optional arg
-      } else if (option.optional) {
-        arg = argv[i + 1];
-        if (arg == null || (arg[0] === '-' && arg !== '-')) {
-          arg = null;
-        } else {
-          ++i;
-        }
-        this.emit('option:' + option.name(), arg);
-      // bool
-      } else {
-        this.emit('option:' + option.name());
-      }
-      continue;
-    }
-
-    // looks like an option
-    if (arg.length > 1 && arg[0] === '-') {
-      unknownOptions.push(arg);
-
-      // If the next argument looks like it might be
-      // an argument for this option, we pass it on.
-      // If it isn't, then it'll simply be ignored
-      if ((i + 1) < argv.length && argv[i + 1][0] !== '-') {
-        unknownOptions.push(argv[++i]);
-      }
-      continue;
-    }
-
-    // arg
-    args.push(arg);
-  }
-
-  return { args: args, unknown: unknownOptions };
-};
-
-/**
- * Return an object containing options as key-value pairs
- *
- * @return {Object}
- * @api public
- */
-Command.prototype.opts = function() {
-  var result = {},
-    len = this.options.length;
-
-  for (var i = 0; i < len; i++) {
-    var key = this.options[i].attributeName();
-    result[key] = key === this._versionOptionName ? this._version : this[key];
-  }
-  return result;
-};
-
-/**
- * Argument `name` is missing.
- *
- * @param {String} name
- * @api private
- */
-
-Command.prototype.missingArgument = function(name) {
-  console.error("error: missing required argument `%s'", name);
-  process.exit(1);
-};
-
-/**
- * `Option` is missing an argument, but received `flag` or nothing.
- *
- * @param {String} option
- * @param {String} flag
- * @api private
- */
-
-Command.prototype.optionMissingArgument = function(option, flag) {
-  if (flag) {
-    console.error("error: option `%s' argument missing, got `%s'", option.flags, flag);
-  } else {
-    console.error("error: option `%s' argument missing", option.flags);
-  }
-  process.exit(1);
-};
-
-/**
- * Unknown option `flag`.
- *
- * @param {String} flag
- * @api private
- */
-
-Command.prototype.unknownOption = function(flag) {
-  if (this._allowUnknownOption) return;
-  console.error("error: unknown option `%s'", flag);
-  process.exit(1);
-};
-
-/**
- * Variadic argument with `name` is not the last argument as required.
- *
- * @param {String} name
- * @api private
- */
-
-Command.prototype.variadicArgNotLast = function(name) {
-  console.error("error: variadic arguments must be last `%s'", name);
-  process.exit(1);
-};
-
-/**
- * Set the program version to `str`.
- *
- * This method auto-registers the "-V, --version" flag
- * which will print the version number when passed.
- *
- * @param {String} str
- * @param {String} [flags]
- * @return {Command} for chaining
- * @api public
- */
-
-Command.prototype.version = function(str, flags) {
-  if (arguments.length === 0) return this._version;
-  this._version = str;
-  flags = flags || '-V, --version';
-  var versionOption = new Option(flags, 'output the version number');
-  this._versionOptionName = versionOption.long.substr(2) || 'version';
-  this.options.push(versionOption);
-  this.on('option:' + this._versionOptionName, function() {
-    process.stdout.write(str + '\n');
-    process.exit(0);
-  });
-  return this;
-};
-
-/**
- * Set the description to `str`.
- *
- * @param {String} str
- * @param {Object} argsDescription
- * @return {String|Command}
- * @api public
- */
-
-Command.prototype.description = function(str, argsDescription) {
-  if (arguments.length === 0) return this._description;
-  this._description = str;
-  this._argsDescription = argsDescription;
-  return this;
-};
-
-/**
- * Set an alias for the command
- *
- * @param {String} alias
- * @return {String|Command}
- * @api public
- */
-
-Command.prototype.alias = function(alias) {
-  var command = this;
-  if (this.commands.length !== 0) {
-    command = this.commands[this.commands.length - 1];
-  }
-
-  if (arguments.length === 0) return command._alias;
-
-  if (alias === command._name) throw new Error('Command alias can\'t be the same as its name');
-
-  command._alias = alias;
-  return this;
-};
-
-/**
- * Set / get the command usage `str`.
- *
- * @param {String} str
- * @return {String|Command}
- * @api public
- */
-
-Command.prototype.usage = function(str) {
-  var args = this._args.map(function(arg) {
-    return humanReadableArgName(arg);
-  });
-
-  var usage = '[options]' +
-    (this.commands.length ? ' [command]' : '') +
-    (this._args.length ? ' ' + args.join(' ') : '');
-
-  if (arguments.length === 0) return this._usage || usage;
-  this._usage = str;
-
-  return this;
-};
-
-/**
- * Get or set the name of the command
- *
- * @param {String} str
- * @return {String|Command}
- * @api public
- */
-
-Command.prototype.name = function(str) {
-  if (arguments.length === 0) return this._name;
-  this._name = str;
-  return this;
-};
-
-/**
- * Return prepared commands.
- *
- * @return {Array}
- * @api private
- */
-
-Command.prototype.prepareCommands = function() {
-  return this.commands.filter(function(cmd) {
-    return !cmd._noHelp;
-  }).map(function(cmd) {
-    var args = cmd._args.map(function(arg) {
-      return humanReadableArgName(arg);
-    }).join(' ');
-
-    return [
-      cmd._name +
-        (cmd._alias ? '|' + cmd._alias : '') +
-        (cmd.options.length ? ' [options]' : '') +
-        (args ? ' ' + args : ''),
-      cmd._description
-    ];
-  });
-};
-
-/**
- * Return the largest command length.
- *
- * @return {Number}
- * @api private
- */
-
-Command.prototype.largestCommandLength = function() {
-  var commands = this.prepareCommands();
-  return commands.reduce(function(max, command) {
-    return Math.max(max, command[0].length);
-  }, 0);
-};
-
-/**
- * Return the largest option length.
- *
- * @return {Number}
- * @api private
- */
-
-Command.prototype.largestOptionLength = function() {
-  var options = [].slice.call(this.options);
-  options.push({
-    flags: '-h, --help'
-  });
-  return options.reduce(function(max, option) {
-    return Math.max(max, option.flags.length);
-  }, 0);
-};
-
-/**
- * Return the largest arg length.
- *
- * @return {Number}
- * @api private
- */
-
-Command.prototype.largestArgLength = function() {
-  return this._args.reduce(function(max, arg) {
-    return Math.max(max, arg.name.length);
-  }, 0);
-};
-
-/**
- * Return the pad width.
- *
- * @return {Number}
- * @api private
- */
-
-Command.prototype.padWidth = function() {
-  var width = this.largestOptionLength();
-  if (this._argsDescription && this._args.length) {
-    if (this.largestArgLength() > width) {
-      width = this.largestArgLength();
-    }
-  }
-
-  if (this.commands && this.commands.length) {
-    if (this.largestCommandLength() > width) {
-      width = this.largestCommandLength();
-    }
-  }
-
-  return width;
-};
-
-/**
- * Return help for options.
- *
- * @return {String}
- * @api private
- */
-
-Command.prototype.optionHelp = function() {
-  var width = this.padWidth();
-
-  // Append the help information
-  return this.options.map(function(option) {
-    return pad(option.flags, width) + '  ' + option.description +
-      ((option.bool && option.defaultValue !== undefined) ? ' (default: ' + JSON.stringify(option.defaultValue) + ')' : '');
-  }).concat([pad('-h, --help', width) + '  ' + 'output usage information'])
-    .join('\n');
-};
-
-/**
- * Return command help documentation.
- *
- * @return {String}
- * @api private
- */
-
-Command.prototype.commandHelp = function() {
-  if (!this.commands.length) return '';
-
-  var commands = this.prepareCommands();
-  var width = this.padWidth();
-
-  return [
-    'Commands:',
-    commands.map(function(cmd) {
-      var desc = cmd[1] ? '  ' + cmd[1] : '';
-      return (desc ? pad(cmd[0], width) : cmd[0]) + desc;
-    }).join('\n').replace(/^/gm, '  '),
-    ''
-  ].join('\n');
-};
-
-/**
- * Return program help documentation.
- *
- * @return {String}
- * @api private
- */
-
-Command.prototype.helpInformation = function() {
-  var desc = [];
-  if (this._description) {
-    desc = [
-      this._description,
-      ''
+    es5.defineProperty(obj, name, descriptor);
+    return obj;
+}
+
+function thrower(r) {
+    throw r;
+}
+
+var inheritedDataKeys = (function() {
+    var excludedPrototypes = [
+        Array.prototype,
+        Object.prototype,
+        Function.prototype
     ];
 
-    var argsDescription = this._argsDescription;
-    if (argsDescription && this._args.length) {
-      var width = this.padWidth();
-      desc.push('Arguments:');
-      desc.push('');
-      this._args.forEach(function(arg) {
-        desc.push('  ' + pad(arg.name, width) + '  ' + argsDescription[arg.name]);
-      });
-      desc.push('');
-    }
-  }
-
-  var cmdName = this._name;
-  if (this._alias) {
-    cmdName = cmdName + '|' + this._alias;
-  }
-  var usage = [
-    'Usage: ' + cmdName + ' ' + this.usage(),
-    ''
-  ];
-
-  var cmds = [];
-  var commandHelp = this.commandHelp();
-  if (commandHelp) cmds = [commandHelp];
-
-  var options = [
-    'Options:',
-    '' + this.optionHelp().replace(/^/gm, '  '),
-    ''
-  ];
-
-  return usage
-    .concat(desc)
-    .concat(options)
-    .concat(cmds)
-    .join('\n');
-};
-
-/**
- * Output help information for this command
- *
- * @api public
- */
-
-Command.prototype.outputHelp = function(cb) {
-  if (!cb) {
-    cb = function(passthru) {
-      return passthru;
+    var isExcludedProto = function(val) {
+        for (var i = 0; i < excludedPrototypes.length; ++i) {
+            if (excludedPrototypes[i] === val) {
+                return true;
+            }
+        }
+        return false;
     };
-  }
-  process.stdout.write(cb(this.helpInformation()));
-  this.emit('--help');
+
+    if (es5.isES5) {
+        var getKeys = Object.getOwnPropertyNames;
+        return function(obj) {
+            var ret = [];
+            var visitedKeys = Object.create(null);
+            while (obj != null && !isExcludedProto(obj)) {
+                var keys;
+                try {
+                    keys = getKeys(obj);
+                } catch (e) {
+                    return ret;
+                }
+                for (var i = 0; i < keys.length; ++i) {
+                    var key = keys[i];
+                    if (visitedKeys[key]) continue;
+                    visitedKeys[key] = true;
+                    var desc = Object.getOwnPropertyDescriptor(obj, key);
+                    if (desc != null && desc.get == null && desc.set == null) {
+                        ret.push(key);
+                    }
+                }
+                obj = es5.getPrototypeOf(obj);
+            }
+            return ret;
+        };
+    } else {
+        var hasProp = {}.hasOwnProperty;
+        return function(obj) {
+            if (isExcludedProto(obj)) return [];
+            var ret = [];
+
+            /*jshint forin:false */
+            enumeration: for (var key in obj) {
+                if (hasProp.call(obj, key)) {
+                    ret.push(key);
+                } else {
+                    for (var i = 0; i < excludedPrototypes.length; ++i) {
+                        if (hasProp.call(excludedPrototypes[i], key)) {
+                            continue enumeration;
+                        }
+                    }
+                    ret.push(key);
+                }
+            }
+            return ret;
+        };
+    }
+
+})();
+
+var thisAssignmentPattern = /this\s*\.\s*\S+\s*=/;
+function isClass(fn) {
+    try {
+        if (typeof fn === "function") {
+            var keys = es5.names(fn.prototype);
+
+            var hasMethods = es5.isES5 && keys.length > 1;
+            var hasMethodsOtherThanConstructor = keys.length > 0 &&
+                !(keys.length === 1 && keys[0] === "constructor");
+            var hasThisAssignmentAndStaticMethods =
+                thisAssignmentPattern.test(fn + "") && es5.names(fn).length > 0;
+
+            if (hasMethods || hasMethodsOtherThanConstructor ||
+                hasThisAssignmentAndStaticMethods) {
+                return true;
+            }
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
+function toFastProperties(obj) {
+    /*jshint -W027,-W055,-W031*/
+    function FakeConstructor() {}
+    FakeConstructor.prototype = obj;
+    var receiver = new FakeConstructor();
+    function ic() {
+        return typeof receiver.foo;
+    }
+    ic();
+    ic();
+    return obj;
+    eval(obj);
+}
+
+var rident = /^[a-z$_][a-z$_0-9]*$/i;
+function isIdentifier(str) {
+    return rident.test(str);
+}
+
+function filledRange(count, prefix, suffix) {
+    var ret = new Array(count);
+    for(var i = 0; i < count; ++i) {
+        ret[i] = prefix + i + suffix;
+    }
+    return ret;
+}
+
+function safeToString(obj) {
+    try {
+        return obj + "";
+    } catch (e) {
+        return "[no string representation]";
+    }
+}
+
+function isError(obj) {
+    return obj instanceof Error ||
+        (obj !== null &&
+           typeof obj === "object" &&
+           typeof obj.message === "string" &&
+           typeof obj.name === "string");
+}
+
+function markAsOriginatingFromRejection(e) {
+    try {
+        notEnumerableProp(e, "isOperational", true);
+    }
+    catch(ignore) {}
+}
+
+function originatesFromRejection(e) {
+    if (e == null) return false;
+    return ((e instanceof Error["__BluebirdErrorTypes__"].OperationalError) ||
+        e["isOperational"] === true);
+}
+
+function canAttachTrace(obj) {
+    return isError(obj) && es5.propertyIsWritable(obj, "stack");
+}
+
+var ensureErrorObject = (function() {
+    if (!("stack" in new Error())) {
+        return function(value) {
+            if (canAttachTrace(value)) return value;
+            try {throw new Error(safeToString(value));}
+            catch(err) {return err;}
+        };
+    } else {
+        return function(value) {
+            if (canAttachTrace(value)) return value;
+            return new Error(safeToString(value));
+        };
+    }
+})();
+
+function classString(obj) {
+    return {}.toString.call(obj);
+}
+
+function copyDescriptors(from, to, filter) {
+    var keys = es5.names(from);
+    for (var i = 0; i < keys.length; ++i) {
+        var key = keys[i];
+        if (filter(key)) {
+            try {
+                es5.defineProperty(to, key, es5.getDescriptor(from, key));
+            } catch (ignore) {}
+        }
+    }
+}
+
+var asArray = function(v) {
+    if (es5.isArray(v)) {
+        return v;
+    }
+    return null;
 };
 
-/**
- * Output help information and exit.
- *
- * @api public
- */
+if (typeof Symbol !== "undefined" && Symbol.iterator) {
+    var ArrayFrom = typeof Array.from === "function" ? function(v) {
+        return Array.from(v);
+    } : function(v) {
+        var ret = [];
+        var it = v[Symbol.iterator]();
+        var itResult;
+        while (!((itResult = it.next()).done)) {
+            ret.push(itResult.value);
+        }
+        return ret;
+    };
 
-Command.prototype.help = function(cb) {
-  this.outputHelp(cb);
-  process.exit();
+    asArray = function(v) {
+        if (es5.isArray(v)) {
+            return v;
+        } else if (v != null && typeof v[Symbol.iterator] === "function") {
+            return ArrayFrom(v);
+        }
+        return null;
+    };
+}
+
+var isNode = typeof process !== "undefined" &&
+        classString(process).toLowerCase() === "[object process]";
+
+var hasEnvVariables = typeof process !== "undefined" &&
+    typeof process.env !== "undefined";
+
+function env(key) {
+    return hasEnvVariables ? process.env[key] : undefined;
+}
+
+function getNativePromise() {
+    if (typeof Promise === "function") {
+        try {
+            var promise = new Promise(function(){});
+            if ({}.toString.call(promise) === "[object Promise]") {
+                return Promise;
+            }
+        } catch (e) {}
+    }
+}
+
+function domainBind(self, cb) {
+    return self.bind(cb);
+}
+
+var ret = {
+    isClass: isClass,
+    isIdentifier: isIdentifier,
+    inheritedDataKeys: inheritedDataKeys,
+    getDataPropertyOrDefault: getDataPropertyOrDefault,
+    thrower: thrower,
+    isArray: es5.isArray,
+    asArray: asArray,
+    notEnumerableProp: notEnumerableProp,
+    isPrimitive: isPrimitive,
+    isObject: isObject,
+    isError: isError,
+    canEvaluate: canEvaluate,
+    errorObj: errorObj,
+    tryCatch: tryCatch,
+    inherits: inherits,
+    withAppended: withAppended,
+    maybeWrapAsError: maybeWrapAsError,
+    toFastProperties: toFastProperties,
+    filledRange: filledRange,
+    toString: safeToString,
+    canAttachTrace: canAttachTrace,
+    ensureErrorObject: ensureErrorObject,
+    originatesFromRejection: originatesFromRejection,
+    markAsOriginatingFromRejection: markAsOriginatingFromRejection,
+    classString: classString,
+    copyDescriptors: copyDescriptors,
+    hasDevTools: typeof chrome !== "undefined" && chrome &&
+                 typeof chrome.loadTimes === "function",
+    isNode: isNode,
+    hasEnvVariables: hasEnvVariables,
+    env: env,
+    global: globalObject,
+    getNativePromise: getNativePromise,
+    domainBind: domainBind
 };
+ret.isRecentNode = ret.isNode && (function() {
+    var version = process.versions.node.split(".").map(Number);
+    return (version[0] === 0 && version[1] > 10) || (version[0] > 0);
+})();
 
-/**
- * Camel-case the given `flag`
- *
- * @param {String} flag
- * @return {String}
- * @api private
- */
+if (ret.isNode) ret.toFastProperties(process);
 
-function camelcase(flag) {
-  return flag.split('-').reduce(function(str, word) {
-    return str + word[0].toUpperCase() + word.slice(1);
-  });
-}
-
-/**
- * Pad `str` to `width`.
- *
- * @param {String} str
- * @param {Number} width
- * @return {String}
- * @api private
- */
-
-function pad(str, width) {
-  var len = Math.max(0, width - str.length);
-  return str + Array(len + 1).join(' ');
-}
-
-/**
- * Output help information if necessary
- *
- * @param {Command} command to output help for
- * @param {Array} array of options to search for -h or --help
- * @api private
- */
-
-function outputHelpIfNecessary(cmd, options) {
-  options = options || [];
-  for (var i = 0; i < options.length; i++) {
-    if (options[i] === '--help' || options[i] === '-h') {
-      cmd.outputHelp();
-      process.exit(0);
-    }
-  }
-}
-
-/**
- * Takes an argument an returns its human readable equivalent for help usage.
- *
- * @param {Object} arg
- * @return {String}
- * @api private
- */
-
-function humanReadableArgName(arg) {
-  var nameOutput = arg.name + (arg.variadic === true ? '...' : '');
-
-  return arg.required
-    ? '<' + nameOutput + '>'
-    : '[' + nameOutput + ']';
-}
-
-// for versions before node v0.8 when there weren't `fs.existsSync`
-function exists(file) {
-  try {
-    if (fs.statSync(file).isFile()) {
-      return true;
-    }
-  } catch (e) {
-    return false;
-  }
-}
+try {throw new Error(); } catch (e) {ret.lastLineError = e;}
+module.exports = ret;
 
 
 /***/ }),
@@ -18422,459 +17580,10 @@ function exists(file) {
   else {}
 }.call(this));
 
-/* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(8)(module)))
+/* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(41)(module)))
 
 /***/ }),
 /* 2 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var es5 = __webpack_require__(11);
-var canEvaluate = typeof navigator == "undefined";
-
-var errorObj = {e: {}};
-var tryCatchTarget;
-var globalObject = typeof self !== "undefined" ? self :
-    typeof window !== "undefined" ? window :
-    typeof global !== "undefined" ? global :
-    this !== undefined ? this : null;
-
-function tryCatcher() {
-    try {
-        var target = tryCatchTarget;
-        tryCatchTarget = null;
-        return target.apply(this, arguments);
-    } catch (e) {
-        errorObj.e = e;
-        return errorObj;
-    }
-}
-function tryCatch(fn) {
-    tryCatchTarget = fn;
-    return tryCatcher;
-}
-
-var inherits = function(Child, Parent) {
-    var hasProp = {}.hasOwnProperty;
-
-    function T() {
-        this.constructor = Child;
-        this.constructor$ = Parent;
-        for (var propertyName in Parent.prototype) {
-            if (hasProp.call(Parent.prototype, propertyName) &&
-                propertyName.charAt(propertyName.length-1) !== "$"
-           ) {
-                this[propertyName + "$"] = Parent.prototype[propertyName];
-            }
-        }
-    }
-    T.prototype = Parent.prototype;
-    Child.prototype = new T();
-    return Child.prototype;
-};
-
-
-function isPrimitive(val) {
-    return val == null || val === true || val === false ||
-        typeof val === "string" || typeof val === "number";
-
-}
-
-function isObject(value) {
-    return typeof value === "function" ||
-           typeof value === "object" && value !== null;
-}
-
-function maybeWrapAsError(maybeError) {
-    if (!isPrimitive(maybeError)) return maybeError;
-
-    return new Error(safeToString(maybeError));
-}
-
-function withAppended(target, appendee) {
-    var len = target.length;
-    var ret = new Array(len + 1);
-    var i;
-    for (i = 0; i < len; ++i) {
-        ret[i] = target[i];
-    }
-    ret[i] = appendee;
-    return ret;
-}
-
-function getDataPropertyOrDefault(obj, key, defaultValue) {
-    if (es5.isES5) {
-        var desc = Object.getOwnPropertyDescriptor(obj, key);
-
-        if (desc != null) {
-            return desc.get == null && desc.set == null
-                    ? desc.value
-                    : defaultValue;
-        }
-    } else {
-        return {}.hasOwnProperty.call(obj, key) ? obj[key] : undefined;
-    }
-}
-
-function notEnumerableProp(obj, name, value) {
-    if (isPrimitive(obj)) return obj;
-    var descriptor = {
-        value: value,
-        configurable: true,
-        enumerable: false,
-        writable: true
-    };
-    es5.defineProperty(obj, name, descriptor);
-    return obj;
-}
-
-function thrower(r) {
-    throw r;
-}
-
-var inheritedDataKeys = (function() {
-    var excludedPrototypes = [
-        Array.prototype,
-        Object.prototype,
-        Function.prototype
-    ];
-
-    var isExcludedProto = function(val) {
-        for (var i = 0; i < excludedPrototypes.length; ++i) {
-            if (excludedPrototypes[i] === val) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    if (es5.isES5) {
-        var getKeys = Object.getOwnPropertyNames;
-        return function(obj) {
-            var ret = [];
-            var visitedKeys = Object.create(null);
-            while (obj != null && !isExcludedProto(obj)) {
-                var keys;
-                try {
-                    keys = getKeys(obj);
-                } catch (e) {
-                    return ret;
-                }
-                for (var i = 0; i < keys.length; ++i) {
-                    var key = keys[i];
-                    if (visitedKeys[key]) continue;
-                    visitedKeys[key] = true;
-                    var desc = Object.getOwnPropertyDescriptor(obj, key);
-                    if (desc != null && desc.get == null && desc.set == null) {
-                        ret.push(key);
-                    }
-                }
-                obj = es5.getPrototypeOf(obj);
-            }
-            return ret;
-        };
-    } else {
-        var hasProp = {}.hasOwnProperty;
-        return function(obj) {
-            if (isExcludedProto(obj)) return [];
-            var ret = [];
-
-            /*jshint forin:false */
-            enumeration: for (var key in obj) {
-                if (hasProp.call(obj, key)) {
-                    ret.push(key);
-                } else {
-                    for (var i = 0; i < excludedPrototypes.length; ++i) {
-                        if (hasProp.call(excludedPrototypes[i], key)) {
-                            continue enumeration;
-                        }
-                    }
-                    ret.push(key);
-                }
-            }
-            return ret;
-        };
-    }
-
-})();
-
-var thisAssignmentPattern = /this\s*\.\s*\S+\s*=/;
-function isClass(fn) {
-    try {
-        if (typeof fn === "function") {
-            var keys = es5.names(fn.prototype);
-
-            var hasMethods = es5.isES5 && keys.length > 1;
-            var hasMethodsOtherThanConstructor = keys.length > 0 &&
-                !(keys.length === 1 && keys[0] === "constructor");
-            var hasThisAssignmentAndStaticMethods =
-                thisAssignmentPattern.test(fn + "") && es5.names(fn).length > 0;
-
-            if (hasMethods || hasMethodsOtherThanConstructor ||
-                hasThisAssignmentAndStaticMethods) {
-                return true;
-            }
-        }
-        return false;
-    } catch (e) {
-        return false;
-    }
-}
-
-function toFastProperties(obj) {
-    /*jshint -W027,-W055,-W031*/
-    function FakeConstructor() {}
-    FakeConstructor.prototype = obj;
-    var receiver = new FakeConstructor();
-    function ic() {
-        return typeof receiver.foo;
-    }
-    ic();
-    ic();
-    return obj;
-    eval(obj);
-}
-
-var rident = /^[a-z$_][a-z$_0-9]*$/i;
-function isIdentifier(str) {
-    return rident.test(str);
-}
-
-function filledRange(count, prefix, suffix) {
-    var ret = new Array(count);
-    for(var i = 0; i < count; ++i) {
-        ret[i] = prefix + i + suffix;
-    }
-    return ret;
-}
-
-function safeToString(obj) {
-    try {
-        return obj + "";
-    } catch (e) {
-        return "[no string representation]";
-    }
-}
-
-function isError(obj) {
-    return obj instanceof Error ||
-        (obj !== null &&
-           typeof obj === "object" &&
-           typeof obj.message === "string" &&
-           typeof obj.name === "string");
-}
-
-function markAsOriginatingFromRejection(e) {
-    try {
-        notEnumerableProp(e, "isOperational", true);
-    }
-    catch(ignore) {}
-}
-
-function originatesFromRejection(e) {
-    if (e == null) return false;
-    return ((e instanceof Error["__BluebirdErrorTypes__"].OperationalError) ||
-        e["isOperational"] === true);
-}
-
-function canAttachTrace(obj) {
-    return isError(obj) && es5.propertyIsWritable(obj, "stack");
-}
-
-var ensureErrorObject = (function() {
-    if (!("stack" in new Error())) {
-        return function(value) {
-            if (canAttachTrace(value)) return value;
-            try {throw new Error(safeToString(value));}
-            catch(err) {return err;}
-        };
-    } else {
-        return function(value) {
-            if (canAttachTrace(value)) return value;
-            return new Error(safeToString(value));
-        };
-    }
-})();
-
-function classString(obj) {
-    return {}.toString.call(obj);
-}
-
-function copyDescriptors(from, to, filter) {
-    var keys = es5.names(from);
-    for (var i = 0; i < keys.length; ++i) {
-        var key = keys[i];
-        if (filter(key)) {
-            try {
-                es5.defineProperty(to, key, es5.getDescriptor(from, key));
-            } catch (ignore) {}
-        }
-    }
-}
-
-var asArray = function(v) {
-    if (es5.isArray(v)) {
-        return v;
-    }
-    return null;
-};
-
-if (typeof Symbol !== "undefined" && Symbol.iterator) {
-    var ArrayFrom = typeof Array.from === "function" ? function(v) {
-        return Array.from(v);
-    } : function(v) {
-        var ret = [];
-        var it = v[Symbol.iterator]();
-        var itResult;
-        while (!((itResult = it.next()).done)) {
-            ret.push(itResult.value);
-        }
-        return ret;
-    };
-
-    asArray = function(v) {
-        if (es5.isArray(v)) {
-            return v;
-        } else if (v != null && typeof v[Symbol.iterator] === "function") {
-            return ArrayFrom(v);
-        }
-        return null;
-    };
-}
-
-var isNode = typeof process !== "undefined" &&
-        classString(process).toLowerCase() === "[object process]";
-
-var hasEnvVariables = typeof process !== "undefined" &&
-    typeof process.env !== "undefined";
-
-function env(key) {
-    return hasEnvVariables ? process.env[key] : undefined;
-}
-
-function getNativePromise() {
-    if (typeof Promise === "function") {
-        try {
-            var promise = new Promise(function(){});
-            if ({}.toString.call(promise) === "[object Promise]") {
-                return Promise;
-            }
-        } catch (e) {}
-    }
-}
-
-function domainBind(self, cb) {
-    return self.bind(cb);
-}
-
-var ret = {
-    isClass: isClass,
-    isIdentifier: isIdentifier,
-    inheritedDataKeys: inheritedDataKeys,
-    getDataPropertyOrDefault: getDataPropertyOrDefault,
-    thrower: thrower,
-    isArray: es5.isArray,
-    asArray: asArray,
-    notEnumerableProp: notEnumerableProp,
-    isPrimitive: isPrimitive,
-    isObject: isObject,
-    isError: isError,
-    canEvaluate: canEvaluate,
-    errorObj: errorObj,
-    tryCatch: tryCatch,
-    inherits: inherits,
-    withAppended: withAppended,
-    maybeWrapAsError: maybeWrapAsError,
-    toFastProperties: toFastProperties,
-    filledRange: filledRange,
-    toString: safeToString,
-    canAttachTrace: canAttachTrace,
-    ensureErrorObject: ensureErrorObject,
-    originatesFromRejection: originatesFromRejection,
-    markAsOriginatingFromRejection: markAsOriginatingFromRejection,
-    classString: classString,
-    copyDescriptors: copyDescriptors,
-    hasDevTools: typeof chrome !== "undefined" && chrome &&
-                 typeof chrome.loadTimes === "function",
-    isNode: isNode,
-    hasEnvVariables: hasEnvVariables,
-    env: env,
-    global: globalObject,
-    getNativePromise: getNativePromise,
-    domainBind: domainBind
-};
-ret.isRecentNode = ret.isNode && (function() {
-    var version = process.versions.node.split(".").map(Number);
-    return (version[0] === 0 && version[1] > 10) || (version[0] > 0);
-})();
-
-if (ret.isNode) ret.toFastProperties(process);
-
-try {throw new Error(); } catch (e) {ret.lastLineError = e;}
-module.exports = ret;
-
-
-/***/ }),
-/* 3 */
-/***/ (function(module, exports) {
-
-module.exports = require("events");
-
-/***/ }),
-/* 4 */
-/***/ (function(module, exports) {
-
-module.exports = require("child_process");
-
-/***/ }),
-/* 5 */
-/***/ (function(module, exports) {
-
-module.exports = require("path");
-
-/***/ }),
-/* 6 */
-/***/ (function(module, exports) {
-
-module.exports = require("fs");
-
-/***/ }),
-/* 7 */
-/***/ (function(module, exports) {
-
-module.exports = require("util");
-
-/***/ }),
-/* 8 */
-/***/ (function(module, exports) {
-
-module.exports = function(module) {
-	if (!module.webpackPolyfill) {
-		module.deprecate = function() {};
-		module.paths = [];
-		// module.parent = undefined by default
-		if (!module.children) module.children = [];
-		Object.defineProperty(module, "loaded", {
-			enumerable: true,
-			get: function() {
-				return module.l;
-			}
-		});
-		Object.defineProperty(module, "id", {
-			enumerable: true,
-			get: function() {
-				return module.i;
-			}
-		});
-		module.webpackPolyfill = 1;
-	}
-	return module;
-};
-
-
-/***/ }),
-/* 9 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -18884,9 +17593,9 @@ module.exports = function(module) {
  * Various utility functions.
  * @namespace
  */
-var util = module.exports = __webpack_require__(13);
+var util = module.exports = __webpack_require__(4);
 
-var roots = __webpack_require__(63);
+var roots = __webpack_require__(30);
 
 var Type, // cyclic
     Enum;
@@ -19012,7 +17721,7 @@ util.decorateType = function decorateType(ctor, typeName) {
 
     /* istanbul ignore next */
     if (!Type)
-        Type = __webpack_require__(54);
+        Type = __webpack_require__(18);
 
     var type = new Type(typeName || ctor.name);
     util.decorateRoot.add(type);
@@ -19037,7 +17746,7 @@ util.decorateEnum = function decorateEnum(object) {
 
     /* istanbul ignore next */
     if (!Enum)
-        Enum = __webpack_require__(12);
+        Enum = __webpack_require__(3);
 
     var enm = new Enum("Enum" + decorateEnumIndex++, object);
     util.decorateRoot.add(enm);
@@ -19053,222 +17762,13 @@ util.decorateEnum = function decorateEnum(object) {
  */
 Object.defineProperty(util, "decorateRoot", {
     get: function() {
-        return roots["decorated"] || (roots["decorated"] = new (__webpack_require__(59))());
+        return roots["decorated"] || (roots["decorated"] = new (__webpack_require__(23))());
     }
 });
 
 
 /***/ }),
-/* 10 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var es5 = __webpack_require__(11);
-var Objectfreeze = es5.freeze;
-var util = __webpack_require__(2);
-var inherits = util.inherits;
-var notEnumerableProp = util.notEnumerableProp;
-
-function subError(nameProperty, defaultMessage) {
-    function SubError(message) {
-        if (!(this instanceof SubError)) return new SubError(message);
-        notEnumerableProp(this, "message",
-            typeof message === "string" ? message : defaultMessage);
-        notEnumerableProp(this, "name", nameProperty);
-        if (Error.captureStackTrace) {
-            Error.captureStackTrace(this, this.constructor);
-        } else {
-            Error.call(this);
-        }
-    }
-    inherits(SubError, Error);
-    return SubError;
-}
-
-var _TypeError, _RangeError;
-var Warning = subError("Warning", "warning");
-var CancellationError = subError("CancellationError", "cancellation error");
-var TimeoutError = subError("TimeoutError", "timeout error");
-var AggregateError = subError("AggregateError", "aggregate error");
-try {
-    _TypeError = TypeError;
-    _RangeError = RangeError;
-} catch(e) {
-    _TypeError = subError("TypeError", "type error");
-    _RangeError = subError("RangeError", "range error");
-}
-
-var methods = ("join pop push shift unshift slice filter forEach some " +
-    "every map indexOf lastIndexOf reduce reduceRight sort reverse").split(" ");
-
-for (var i = 0; i < methods.length; ++i) {
-    if (typeof Array.prototype[methods[i]] === "function") {
-        AggregateError.prototype[methods[i]] = Array.prototype[methods[i]];
-    }
-}
-
-es5.defineProperty(AggregateError.prototype, "length", {
-    value: 0,
-    configurable: false,
-    writable: true,
-    enumerable: true
-});
-AggregateError.prototype["isOperational"] = true;
-var level = 0;
-AggregateError.prototype.toString = function() {
-    var indent = Array(level * 4 + 1).join(" ");
-    var ret = "\n" + indent + "AggregateError of:" + "\n";
-    level++;
-    indent = Array(level * 4 + 1).join(" ");
-    for (var i = 0; i < this.length; ++i) {
-        var str = this[i] === this ? "[Circular AggregateError]" : this[i] + "";
-        var lines = str.split("\n");
-        for (var j = 0; j < lines.length; ++j) {
-            lines[j] = indent + lines[j];
-        }
-        str = lines.join("\n");
-        ret += str + "\n";
-    }
-    level--;
-    return ret;
-};
-
-function OperationalError(message) {
-    if (!(this instanceof OperationalError))
-        return new OperationalError(message);
-    notEnumerableProp(this, "name", "OperationalError");
-    notEnumerableProp(this, "message", message);
-    this.cause = message;
-    this["isOperational"] = true;
-
-    if (message instanceof Error) {
-        notEnumerableProp(this, "message", message.message);
-        notEnumerableProp(this, "stack", message.stack);
-    } else if (Error.captureStackTrace) {
-        Error.captureStackTrace(this, this.constructor);
-    }
-
-}
-inherits(OperationalError, Error);
-
-var errorTypes = Error["__BluebirdErrorTypes__"];
-if (!errorTypes) {
-    errorTypes = Objectfreeze({
-        CancellationError: CancellationError,
-        TimeoutError: TimeoutError,
-        OperationalError: OperationalError,
-        RejectionError: OperationalError,
-        AggregateError: AggregateError
-    });
-    es5.defineProperty(Error, "__BluebirdErrorTypes__", {
-        value: errorTypes,
-        writable: false,
-        enumerable: false,
-        configurable: false
-    });
-}
-
-module.exports = {
-    Error: Error,
-    TypeError: _TypeError,
-    RangeError: _RangeError,
-    CancellationError: errorTypes.CancellationError,
-    OperationalError: errorTypes.OperationalError,
-    TimeoutError: errorTypes.TimeoutError,
-    AggregateError: errorTypes.AggregateError,
-    Warning: Warning
-};
-
-
-/***/ }),
-/* 11 */
-/***/ (function(module, exports) {
-
-var isES5 = (function(){
-    "use strict";
-    return this === undefined;
-})();
-
-if (isES5) {
-    module.exports = {
-        freeze: Object.freeze,
-        defineProperty: Object.defineProperty,
-        getDescriptor: Object.getOwnPropertyDescriptor,
-        keys: Object.keys,
-        names: Object.getOwnPropertyNames,
-        getPrototypeOf: Object.getPrototypeOf,
-        isArray: Array.isArray,
-        isES5: isES5,
-        propertyIsWritable: function(obj, prop) {
-            var descriptor = Object.getOwnPropertyDescriptor(obj, prop);
-            return !!(!descriptor || descriptor.writable || descriptor.set);
-        }
-    };
-} else {
-    var has = {}.hasOwnProperty;
-    var str = {}.toString;
-    var proto = {}.constructor.prototype;
-
-    var ObjectKeys = function (o) {
-        var ret = [];
-        for (var key in o) {
-            if (has.call(o, key)) {
-                ret.push(key);
-            }
-        }
-        return ret;
-    };
-
-    var ObjectGetDescriptor = function(o, key) {
-        return {value: o[key]};
-    };
-
-    var ObjectDefineProperty = function (o, key, desc) {
-        o[key] = desc.value;
-        return o;
-    };
-
-    var ObjectFreeze = function (obj) {
-        return obj;
-    };
-
-    var ObjectGetPrototypeOf = function (obj) {
-        try {
-            return Object(obj).constructor.prototype;
-        }
-        catch (e) {
-            return proto;
-        }
-    };
-
-    var ArrayIsArray = function (obj) {
-        try {
-            return str.call(obj) === "[object Array]";
-        }
-        catch(e) {
-            return false;
-        }
-    };
-
-    module.exports = {
-        isArray: ArrayIsArray,
-        keys: ObjectKeys,
-        names: ObjectKeys,
-        defineProperty: ObjectDefineProperty,
-        getDescriptor: ObjectGetDescriptor,
-        freeze: ObjectFreeze,
-        getPrototypeOf: ObjectGetPrototypeOf,
-        isES5: isES5,
-        propertyIsWritable: function() {
-            return true;
-        }
-    };
-}
-
-
-/***/ }),
-/* 12 */
+/* 3 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -19276,11 +17776,11 @@ if (isES5) {
 module.exports = Enum;
 
 // extends ReflectionObject
-var ReflectionObject = __webpack_require__(15);
+var ReflectionObject = __webpack_require__(8);
 ((Enum.prototype = Object.create(ReflectionObject.prototype)).constructor = Enum).className = "Enum";
 
-var Namespace = __webpack_require__(17),
-    util = __webpack_require__(9);
+var Namespace = __webpack_require__(10),
+    util = __webpack_require__(2);
 
 /**
  * Constructs a new enum instance.
@@ -19456,7 +17956,7 @@ Enum.prototype.isReservedName = function isReservedName(name) {
 
 
 /***/ }),
-/* 13 */
+/* 4 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -19464,19 +17964,19 @@ Enum.prototype.isReservedName = function isReservedName(name) {
 var util = exports;
 
 // used to return a Promise where callback is omitted
-util.asPromise = __webpack_require__(60);
+util.asPromise = __webpack_require__(27);
 
 // converts to / from base64 encoded strings
-util.base64 = __webpack_require__(74);
+util.base64 = __webpack_require__(75);
 
 // base class of rpc.Service
-util.EventEmitter = __webpack_require__(75);
+util.EventEmitter = __webpack_require__(76);
 
 // float handling accross browsers
 util.float = __webpack_require__(77);
 
 // requires modules optionally and hides the call from bundlers
-util.inquire = __webpack_require__(61);
+util.inquire = __webpack_require__(28);
 
 // converts to / from utf8 encoded strings
 util.utf8 = __webpack_require__(78);
@@ -19877,7 +18377,216 @@ util._configure = function() {
 
 
 /***/ }),
-/* 14 */
+/* 5 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var es5 = __webpack_require__(6);
+var Objectfreeze = es5.freeze;
+var util = __webpack_require__(0);
+var inherits = util.inherits;
+var notEnumerableProp = util.notEnumerableProp;
+
+function subError(nameProperty, defaultMessage) {
+    function SubError(message) {
+        if (!(this instanceof SubError)) return new SubError(message);
+        notEnumerableProp(this, "message",
+            typeof message === "string" ? message : defaultMessage);
+        notEnumerableProp(this, "name", nameProperty);
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, this.constructor);
+        } else {
+            Error.call(this);
+        }
+    }
+    inherits(SubError, Error);
+    return SubError;
+}
+
+var _TypeError, _RangeError;
+var Warning = subError("Warning", "warning");
+var CancellationError = subError("CancellationError", "cancellation error");
+var TimeoutError = subError("TimeoutError", "timeout error");
+var AggregateError = subError("AggregateError", "aggregate error");
+try {
+    _TypeError = TypeError;
+    _RangeError = RangeError;
+} catch(e) {
+    _TypeError = subError("TypeError", "type error");
+    _RangeError = subError("RangeError", "range error");
+}
+
+var methods = ("join pop push shift unshift slice filter forEach some " +
+    "every map indexOf lastIndexOf reduce reduceRight sort reverse").split(" ");
+
+for (var i = 0; i < methods.length; ++i) {
+    if (typeof Array.prototype[methods[i]] === "function") {
+        AggregateError.prototype[methods[i]] = Array.prototype[methods[i]];
+    }
+}
+
+es5.defineProperty(AggregateError.prototype, "length", {
+    value: 0,
+    configurable: false,
+    writable: true,
+    enumerable: true
+});
+AggregateError.prototype["isOperational"] = true;
+var level = 0;
+AggregateError.prototype.toString = function() {
+    var indent = Array(level * 4 + 1).join(" ");
+    var ret = "\n" + indent + "AggregateError of:" + "\n";
+    level++;
+    indent = Array(level * 4 + 1).join(" ");
+    for (var i = 0; i < this.length; ++i) {
+        var str = this[i] === this ? "[Circular AggregateError]" : this[i] + "";
+        var lines = str.split("\n");
+        for (var j = 0; j < lines.length; ++j) {
+            lines[j] = indent + lines[j];
+        }
+        str = lines.join("\n");
+        ret += str + "\n";
+    }
+    level--;
+    return ret;
+};
+
+function OperationalError(message) {
+    if (!(this instanceof OperationalError))
+        return new OperationalError(message);
+    notEnumerableProp(this, "name", "OperationalError");
+    notEnumerableProp(this, "message", message);
+    this.cause = message;
+    this["isOperational"] = true;
+
+    if (message instanceof Error) {
+        notEnumerableProp(this, "message", message.message);
+        notEnumerableProp(this, "stack", message.stack);
+    } else if (Error.captureStackTrace) {
+        Error.captureStackTrace(this, this.constructor);
+    }
+
+}
+inherits(OperationalError, Error);
+
+var errorTypes = Error["__BluebirdErrorTypes__"];
+if (!errorTypes) {
+    errorTypes = Objectfreeze({
+        CancellationError: CancellationError,
+        TimeoutError: TimeoutError,
+        OperationalError: OperationalError,
+        RejectionError: OperationalError,
+        AggregateError: AggregateError
+    });
+    es5.defineProperty(Error, "__BluebirdErrorTypes__", {
+        value: errorTypes,
+        writable: false,
+        enumerable: false,
+        configurable: false
+    });
+}
+
+module.exports = {
+    Error: Error,
+    TypeError: _TypeError,
+    RangeError: _RangeError,
+    CancellationError: errorTypes.CancellationError,
+    OperationalError: errorTypes.OperationalError,
+    TimeoutError: errorTypes.TimeoutError,
+    AggregateError: errorTypes.AggregateError,
+    Warning: Warning
+};
+
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports) {
+
+var isES5 = (function(){
+    "use strict";
+    return this === undefined;
+})();
+
+if (isES5) {
+    module.exports = {
+        freeze: Object.freeze,
+        defineProperty: Object.defineProperty,
+        getDescriptor: Object.getOwnPropertyDescriptor,
+        keys: Object.keys,
+        names: Object.getOwnPropertyNames,
+        getPrototypeOf: Object.getPrototypeOf,
+        isArray: Array.isArray,
+        isES5: isES5,
+        propertyIsWritable: function(obj, prop) {
+            var descriptor = Object.getOwnPropertyDescriptor(obj, prop);
+            return !!(!descriptor || descriptor.writable || descriptor.set);
+        }
+    };
+} else {
+    var has = {}.hasOwnProperty;
+    var str = {}.toString;
+    var proto = {}.constructor.prototype;
+
+    var ObjectKeys = function (o) {
+        var ret = [];
+        for (var key in o) {
+            if (has.call(o, key)) {
+                ret.push(key);
+            }
+        }
+        return ret;
+    };
+
+    var ObjectGetDescriptor = function(o, key) {
+        return {value: o[key]};
+    };
+
+    var ObjectDefineProperty = function (o, key, desc) {
+        o[key] = desc.value;
+        return o;
+    };
+
+    var ObjectFreeze = function (obj) {
+        return obj;
+    };
+
+    var ObjectGetPrototypeOf = function (obj) {
+        try {
+            return Object(obj).constructor.prototype;
+        }
+        catch (e) {
+            return proto;
+        }
+    };
+
+    var ArrayIsArray = function (obj) {
+        try {
+            return str.call(obj) === "[object Array]";
+        }
+        catch(e) {
+            return false;
+        }
+    };
+
+    module.exports = {
+        isArray: ArrayIsArray,
+        keys: ObjectKeys,
+        names: ObjectKeys,
+        defineProperty: ObjectDefineProperty,
+        getDescriptor: ObjectGetDescriptor,
+        freeze: ObjectFreeze,
+        getPrototypeOf: ObjectGetPrototypeOf,
+        isES5: isES5,
+        propertyIsWritable: function() {
+            return true;
+        }
+    };
+}
+
+
+/***/ }),
+/* 7 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -19885,12 +18594,12 @@ util._configure = function() {
 module.exports = Field;
 
 // extends ReflectionObject
-var ReflectionObject = __webpack_require__(15);
+var ReflectionObject = __webpack_require__(8);
 ((Field.prototype = Object.create(ReflectionObject.prototype)).constructor = Field).className = "Field";
 
-var Enum  = __webpack_require__(12),
-    types = __webpack_require__(16),
-    util  = __webpack_require__(9);
+var Enum  = __webpack_require__(3),
+    types = __webpack_require__(9),
+    util  = __webpack_require__(2);
 
 var Type; // cyclic
 
@@ -20255,7 +18964,7 @@ Field._configure = function configure(Type_) {
 
 
 /***/ }),
-/* 15 */
+/* 8 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -20264,7 +18973,7 @@ module.exports = ReflectionObject;
 
 ReflectionObject.className = "ReflectionObject";
 
-var util = __webpack_require__(9);
+var util = __webpack_require__(2);
 
 var Root; // cyclic
 
@@ -20462,7 +19171,7 @@ ReflectionObject._configure = function(Root_) {
 
 
 /***/ }),
-/* 16 */
+/* 9 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -20474,7 +19183,7 @@ ReflectionObject._configure = function(Root_) {
  */
 var types = exports;
 
-var util = __webpack_require__(9);
+var util = __webpack_require__(2);
 
 var s = [
     "double",   // 0
@@ -20665,7 +19374,7 @@ types.packed = bake([
 
 
 /***/ }),
-/* 17 */
+/* 10 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -20673,11 +19382,11 @@ types.packed = bake([
 module.exports = Namespace;
 
 // extends ReflectionObject
-var ReflectionObject = __webpack_require__(15);
+var ReflectionObject = __webpack_require__(8);
 ((Namespace.prototype = Object.create(ReflectionObject.prototype)).constructor = Namespace).className = "Namespace";
 
-var Field    = __webpack_require__(14),
-    util     = __webpack_require__(9);
+var Field    = __webpack_require__(7),
+    util     = __webpack_require__(2);
 
 var Type,    // cyclic
     Service,
@@ -21105,132 +19814,1240 @@ Namespace._configure = function(Type_, Service_, Enum_) {
 
 
 /***/ }),
-/* 18 */
+/* 11 */
 /***/ (function(module, exports, __webpack_require__) {
 
-"use strict";
+/**
+ * Module dependencies.
+ */
 
-var old;
-if (typeof Promise !== "undefined") old = Promise;
-function noConflict() {
-    try { if (Promise === bluebird) Promise = old; }
-    catch (e) {}
-    return bluebird;
-}
-var bluebird = __webpack_require__(24)();
-bluebird.noConflict = noConflict;
-module.exports = bluebird;
+var EventEmitter = __webpack_require__(37).EventEmitter;
+var spawn = __webpack_require__(38).spawn;
+var path = __webpack_require__(39);
+var dirname = path.dirname;
+var basename = path.basename;
+var fs = __webpack_require__(13);
 
+/**
+ * Inherit `Command` from `EventEmitter.prototype`.
+ */
 
-/***/ }),
-/* 19 */
-/***/ (function(module, exports, __webpack_require__) {
+__webpack_require__(40).inherits(Command, EventEmitter);
 
-"use strict";
+/**
+ * Expose the root command.
+ */
 
-module.exports = function(NEXT_FILTER) {
-var util = __webpack_require__(2);
-var getKeys = __webpack_require__(11).keys;
-var tryCatch = util.tryCatch;
-var errorObj = util.errorObj;
+exports = module.exports = new Command();
 
-function catchFilter(instances, cb, promise) {
-    return function(e) {
-        var boundTo = promise._boundValue();
-        predicateLoop: for (var i = 0; i < instances.length; ++i) {
-            var item = instances[i];
+/**
+ * Expose `Command`.
+ */
 
-            if (item === Error ||
-                (item != null && item.prototype instanceof Error)) {
-                if (e instanceof item) {
-                    return tryCatch(cb).call(boundTo, e);
-                }
-            } else if (typeof item === "function") {
-                var matchesPredicate = tryCatch(item).call(boundTo, e);
-                if (matchesPredicate === errorObj) {
-                    return matchesPredicate;
-                } else if (matchesPredicate) {
-                    return tryCatch(cb).call(boundTo, e);
-                }
-            } else if (util.isObject(e)) {
-                var keys = getKeys(item);
-                for (var j = 0; j < keys.length; ++j) {
-                    var key = keys[j];
-                    if (item[key] != e[key]) {
-                        continue predicateLoop;
-                    }
-                }
-                return tryCatch(cb).call(boundTo, e);
-            }
-        }
-        return NEXT_FILTER;
-    };
+exports.Command = Command;
+
+/**
+ * Expose `Option`.
+ */
+
+exports.Option = Option;
+
+/**
+ * Initialize a new `Option` with the given `flags` and `description`.
+ *
+ * @param {String} flags
+ * @param {String} description
+ * @api public
+ */
+
+function Option(flags, description) {
+  this.flags = flags;
+  this.required = flags.indexOf('<') >= 0;
+  this.optional = flags.indexOf('[') >= 0;
+  this.bool = flags.indexOf('-no-') === -1;
+  flags = flags.split(/[ ,|]+/);
+  if (flags.length > 1 && !/^[[<]/.test(flags[1])) this.short = flags.shift();
+  this.long = flags.shift();
+  this.description = description || '';
 }
 
-return catchFilter;
+/**
+ * Return option name.
+ *
+ * @return {String}
+ * @api private
+ */
+
+Option.prototype.name = function() {
+  return this.long
+    .replace('--', '')
+    .replace('no-', '');
 };
 
+/**
+ * Return option name, in a camelcase format that can be used
+ * as a object attribute key.
+ *
+ * @return {String}
+ * @api private
+ */
 
-/***/ }),
-/* 20 */
-/***/ (function(module, exports, __webpack_require__) {
+Option.prototype.attributeName = function() {
+  return camelcase(this.name());
+};
 
-"use strict";
+/**
+ * Check if `arg` matches the short or long flag.
+ *
+ * @param {String} arg
+ * @return {Boolean}
+ * @api private
+ */
 
-var util = __webpack_require__(2);
-var maybeWrapAsError = util.maybeWrapAsError;
-var errors = __webpack_require__(10);
-var OperationalError = errors.OperationalError;
-var es5 = __webpack_require__(11);
+Option.prototype.is = function(arg) {
+  return this.short === arg || this.long === arg;
+};
 
-function isUntypedError(obj) {
-    return obj instanceof Error &&
-        es5.getPrototypeOf(obj) === Error.prototype;
+/**
+ * Initialize a new `Command`.
+ *
+ * @param {String} name
+ * @api public
+ */
+
+function Command(name) {
+  this.commands = [];
+  this.options = [];
+  this._execs = {};
+  this._allowUnknownOption = false;
+  this._args = [];
+  this._name = name || '';
 }
 
-var rErrorKey = /^(?:name|message|stack|cause)$/;
-function wrapAsOperationalError(obj) {
-    var ret;
-    if (isUntypedError(obj)) {
-        ret = new OperationalError(obj);
-        ret.name = obj.name;
-        ret.message = obj.message;
-        ret.stack = obj.stack;
-        var keys = es5.keys(obj);
-        for (var i = 0; i < keys.length; ++i) {
-            var key = keys[i];
-            if (!rErrorKey.test(key)) {
-                ret[key] = obj[key];
-            }
-        }
-        return ret;
-    }
-    util.markAsOriginatingFromRejection(obj);
-    return obj;
-}
+/**
+ * Add command `name`.
+ *
+ * The `.action()` callback is invoked when the
+ * command `name` is specified via __ARGV__,
+ * and the remaining arguments are applied to the
+ * function for access.
+ *
+ * When the `name` is "*" an un-matched command
+ * will be passed as the first arg, followed by
+ * the rest of __ARGV__ remaining.
+ *
+ * Examples:
+ *
+ *      program
+ *        .version('0.0.1')
+ *        .option('-C, --chdir <path>', 'change the working directory')
+ *        .option('-c, --config <path>', 'set config path. defaults to ./deploy.conf')
+ *        .option('-T, --no-tests', 'ignore test hook')
+ *
+ *      program
+ *        .command('setup')
+ *        .description('run remote setup commands')
+ *        .action(function() {
+ *          console.log('setup');
+ *        });
+ *
+ *      program
+ *        .command('exec <cmd>')
+ *        .description('run the given remote command')
+ *        .action(function(cmd) {
+ *          console.log('exec "%s"', cmd);
+ *        });
+ *
+ *      program
+ *        .command('teardown <dir> [otherDirs...]')
+ *        .description('run teardown commands')
+ *        .action(function(dir, otherDirs) {
+ *          console.log('dir "%s"', dir);
+ *          if (otherDirs) {
+ *            otherDirs.forEach(function (oDir) {
+ *              console.log('dir "%s"', oDir);
+ *            });
+ *          }
+ *        });
+ *
+ *      program
+ *        .command('*')
+ *        .description('deploy the given env')
+ *        .action(function(env) {
+ *          console.log('deploying "%s"', env);
+ *        });
+ *
+ *      program.parse(process.argv);
+  *
+ * @param {String} name
+ * @param {String} [desc] for git-style sub-commands
+ * @return {Command} the new command
+ * @api public
+ */
 
-function nodebackForPromise(promise, multiArgs) {
-    return function(err, value) {
-        if (promise === null) return;
-        if (err) {
-            var wrapped = wrapAsOperationalError(maybeWrapAsError(err));
-            promise._attachExtraTrace(wrapped);
-            promise._reject(wrapped);
-        } else if (!multiArgs) {
-            promise._fulfill(value);
-        } else {
-            var $_len = arguments.length;var args = new Array(Math.max($_len - 1, 0)); for(var $_i = 1; $_i < $_len; ++$_i) {args[$_i - 1] = arguments[$_i];};
-            promise._fulfill(args);
-        }
-        promise = null;
+Command.prototype.command = function(name, desc, opts) {
+  if (typeof desc === 'object' && desc !== null) {
+    opts = desc;
+    desc = null;
+  }
+  opts = opts || {};
+  var args = name.split(/ +/);
+  var cmd = new Command(args.shift());
+
+  if (desc) {
+    cmd.description(desc);
+    this.executables = true;
+    this._execs[cmd._name] = true;
+    if (opts.isDefault) this.defaultExecutable = cmd._name;
+  }
+  cmd._noHelp = !!opts.noHelp;
+  this.commands.push(cmd);
+  cmd.parseExpectedArgs(args);
+  cmd.parent = this;
+
+  if (desc) return this;
+  return cmd;
+};
+
+/**
+ * Define argument syntax for the top-level command.
+ *
+ * @api public
+ */
+
+Command.prototype.arguments = function(desc) {
+  return this.parseExpectedArgs(desc.split(/ +/));
+};
+
+/**
+ * Add an implicit `help [cmd]` subcommand
+ * which invokes `--help` for the given command.
+ *
+ * @api private
+ */
+
+Command.prototype.addImplicitHelpCommand = function() {
+  this.command('help [cmd]', 'display help for [cmd]');
+};
+
+/**
+ * Parse expected `args`.
+ *
+ * For example `["[type]"]` becomes `[{ required: false, name: 'type' }]`.
+ *
+ * @param {Array} args
+ * @return {Command} for chaining
+ * @api public
+ */
+
+Command.prototype.parseExpectedArgs = function(args) {
+  if (!args.length) return;
+  var self = this;
+  args.forEach(function(arg) {
+    var argDetails = {
+      required: false,
+      name: '',
+      variadic: false
     };
+
+    switch (arg[0]) {
+      case '<':
+        argDetails.required = true;
+        argDetails.name = arg.slice(1, -1);
+        break;
+      case '[':
+        argDetails.name = arg.slice(1, -1);
+        break;
+    }
+
+    if (argDetails.name.length > 3 && argDetails.name.slice(-3) === '...') {
+      argDetails.variadic = true;
+      argDetails.name = argDetails.name.slice(0, -3);
+    }
+    if (argDetails.name) {
+      self._args.push(argDetails);
+    }
+  });
+  return this;
+};
+
+/**
+ * Register callback `fn` for the command.
+ *
+ * Examples:
+ *
+ *      program
+ *        .command('help')
+ *        .description('display verbose help')
+ *        .action(function() {
+ *           // output help here
+ *        });
+ *
+ * @param {Function} fn
+ * @return {Command} for chaining
+ * @api public
+ */
+
+Command.prototype.action = function(fn) {
+  var self = this;
+  var listener = function(args, unknown) {
+    // Parse any so-far unknown options
+    args = args || [];
+    unknown = unknown || [];
+
+    var parsed = self.parseOptions(unknown);
+
+    // Output help if necessary
+    outputHelpIfNecessary(self, parsed.unknown);
+
+    // If there are still any unknown options, then we simply
+    // die, unless someone asked for help, in which case we give it
+    // to them, and then we die.
+    if (parsed.unknown.length > 0) {
+      self.unknownOption(parsed.unknown[0]);
+    }
+
+    // Leftover arguments need to be pushed back. Fixes issue #56
+    if (parsed.args.length) args = parsed.args.concat(args);
+
+    self._args.forEach(function(arg, i) {
+      if (arg.required && args[i] == null) {
+        self.missingArgument(arg.name);
+      } else if (arg.variadic) {
+        if (i !== self._args.length - 1) {
+          self.variadicArgNotLast(arg.name);
+        }
+
+        args[i] = args.splice(i);
+      }
+    });
+
+    // Always append ourselves to the end of the arguments,
+    // to make sure we match the number of arguments the user
+    // expects
+    if (self._args.length) {
+      args[self._args.length] = self;
+    } else {
+      args.push(self);
+    }
+
+    fn.apply(self, args);
+  };
+  var parent = this.parent || this;
+  var name = parent === this ? '*' : this._name;
+  parent.on('command:' + name, listener);
+  if (this._alias) parent.on('command:' + this._alias, listener);
+  return this;
+};
+
+/**
+ * Define option with `flags`, `description` and optional
+ * coercion `fn`.
+ *
+ * The `flags` string should contain both the short and long flags,
+ * separated by comma, a pipe or space. The following are all valid
+ * all will output this way when `--help` is used.
+ *
+ *    "-p, --pepper"
+ *    "-p|--pepper"
+ *    "-p --pepper"
+ *
+ * Examples:
+ *
+ *     // simple boolean defaulting to false
+ *     program.option('-p, --pepper', 'add pepper');
+ *
+ *     --pepper
+ *     program.pepper
+ *     // => Boolean
+ *
+ *     // simple boolean defaulting to true
+ *     program.option('-C, --no-cheese', 'remove cheese');
+ *
+ *     program.cheese
+ *     // => true
+ *
+ *     --no-cheese
+ *     program.cheese
+ *     // => false
+ *
+ *     // required argument
+ *     program.option('-C, --chdir <path>', 'change the working directory');
+ *
+ *     --chdir /tmp
+ *     program.chdir
+ *     // => "/tmp"
+ *
+ *     // optional argument
+ *     program.option('-c, --cheese [type]', 'add cheese [marble]');
+ *
+ * @param {String} flags
+ * @param {String} description
+ * @param {Function|*} [fn] or default
+ * @param {*} [defaultValue]
+ * @return {Command} for chaining
+ * @api public
+ */
+
+Command.prototype.option = function(flags, description, fn, defaultValue) {
+  var self = this,
+    option = new Option(flags, description),
+    oname = option.name(),
+    name = option.attributeName();
+
+  // default as 3rd arg
+  if (typeof fn !== 'function') {
+    if (fn instanceof RegExp) {
+      var regex = fn;
+      fn = function(val, def) {
+        var m = regex.exec(val);
+        return m ? m[0] : def;
+      };
+    } else {
+      defaultValue = fn;
+      fn = null;
+    }
+  }
+
+  // preassign default value only for --no-*, [optional], or <required>
+  if (!option.bool || option.optional || option.required) {
+    // when --no-* we make sure default is true
+    if (!option.bool) defaultValue = true;
+    // preassign only if we have a default
+    if (defaultValue !== undefined) {
+      self[name] = defaultValue;
+      option.defaultValue = defaultValue;
+    }
+  }
+
+  // register the option
+  this.options.push(option);
+
+  // when it's passed assign the value
+  // and conditionally invoke the callback
+  this.on('option:' + oname, function(val) {
+    // coercion
+    if (val !== null && fn) {
+      val = fn(val, self[name] === undefined ? defaultValue : self[name]);
+    }
+
+    // unassigned or bool
+    if (typeof self[name] === 'boolean' || typeof self[name] === 'undefined') {
+      // if no value, bool true, and we have a default, then use it!
+      if (val == null) {
+        self[name] = option.bool
+          ? defaultValue || true
+          : false;
+      } else {
+        self[name] = val;
+      }
+    } else if (val !== null) {
+      // reassign
+      self[name] = val;
+    }
+  });
+
+  return this;
+};
+
+/**
+ * Allow unknown options on the command line.
+ *
+ * @param {Boolean} arg if `true` or omitted, no error will be thrown
+ * for unknown options.
+ * @api public
+ */
+Command.prototype.allowUnknownOption = function(arg) {
+  this._allowUnknownOption = arguments.length === 0 || arg;
+  return this;
+};
+
+/**
+ * Parse `argv`, settings options and invoking commands when defined.
+ *
+ * @param {Array} argv
+ * @return {Command} for chaining
+ * @api public
+ */
+
+Command.prototype.parse = function(argv) {
+  // implicit help
+  if (this.executables) this.addImplicitHelpCommand();
+
+  // store raw args
+  this.rawArgs = argv;
+
+  // guess name
+  this._name = this._name || basename(argv[1], '.js');
+
+  // github-style sub-commands with no sub-command
+  if (this.executables && argv.length < 3 && !this.defaultExecutable) {
+    // this user needs help
+    argv.push('--help');
+  }
+
+  // process argv
+  var parsed = this.parseOptions(this.normalize(argv.slice(2)));
+  var args = this.args = parsed.args;
+
+  var result = this.parseArgs(this.args, parsed.unknown);
+
+  // executable sub-commands
+  var name = result.args[0];
+
+  var aliasCommand = null;
+  // check alias of sub commands
+  if (name) {
+    aliasCommand = this.commands.filter(function(command) {
+      return command.alias() === name;
+    })[0];
+  }
+
+  if (this._execs[name] && typeof this._execs[name] !== 'function') {
+    return this.executeSubCommand(argv, args, parsed.unknown);
+  } else if (aliasCommand) {
+    // is alias of a subCommand
+    args[0] = aliasCommand._name;
+    return this.executeSubCommand(argv, args, parsed.unknown);
+  } else if (this.defaultExecutable) {
+    // use the default subcommand
+    args.unshift(this.defaultExecutable);
+    return this.executeSubCommand(argv, args, parsed.unknown);
+  }
+
+  return result;
+};
+
+/**
+ * Execute a sub-command executable.
+ *
+ * @param {Array} argv
+ * @param {Array} args
+ * @param {Array} unknown
+ * @api private
+ */
+
+Command.prototype.executeSubCommand = function(argv, args, unknown) {
+  args = args.concat(unknown);
+
+  if (!args.length) this.help();
+  if (args[0] === 'help' && args.length === 1) this.help();
+
+  // <cmd> --help
+  if (args[0] === 'help') {
+    args[0] = args[1];
+    args[1] = '--help';
+  }
+
+  // executable
+  var f = argv[1];
+  // name of the subcommand, link `pm-install`
+  var bin = basename(f, path.extname(f)) + '-' + args[0];
+
+  // In case of globally installed, get the base dir where executable
+  //  subcommand file should be located at
+  var baseDir,
+    link = fs.lstatSync(f).isSymbolicLink() ? fs.readlinkSync(f) : f;
+
+  // when symbolink is relative path
+  if (link !== f && link.charAt(0) !== '/') {
+    link = path.join(dirname(f), link);
+  }
+  baseDir = dirname(link);
+
+  // prefer local `./<bin>` to bin in the $PATH
+  var localBin = path.join(baseDir, bin);
+
+  // whether bin file is a js script with explicit `.js` or `.ts` extension
+  var isExplicitJS = false;
+  if (exists(localBin + '.js')) {
+    bin = localBin + '.js';
+    isExplicitJS = true;
+  } else if (exists(localBin + '.ts')) {
+    bin = localBin + '.ts';
+    isExplicitJS = true;
+  } else if (exists(localBin)) {
+    bin = localBin;
+  }
+
+  args = args.slice(1);
+
+  var proc;
+  if (process.platform !== 'win32') {
+    if (isExplicitJS) {
+      args.unshift(bin);
+      // add executable arguments to spawn
+      args = (process.execArgv || []).concat(args);
+
+      proc = spawn(process.argv[0], args, { stdio: 'inherit', customFds: [0, 1, 2] });
+    } else {
+      proc = spawn(bin, args, { stdio: 'inherit', customFds: [0, 1, 2] });
+    }
+  } else {
+    args.unshift(bin);
+    proc = spawn(process.execPath, args, { stdio: 'inherit' });
+  }
+
+  var signals = ['SIGUSR1', 'SIGUSR2', 'SIGTERM', 'SIGINT', 'SIGHUP'];
+  signals.forEach(function(signal) {
+    process.on(signal, function() {
+      if (proc.killed === false && proc.exitCode === null) {
+        proc.kill(signal);
+      }
+    });
+  });
+  proc.on('close', process.exit.bind(process));
+  proc.on('error', function(err) {
+    if (err.code === 'ENOENT') {
+      console.error('error: %s(1) does not exist, try --help', bin);
+    } else if (err.code === 'EACCES') {
+      console.error('error: %s(1) not executable. try chmod or run with root', bin);
+    }
+    process.exit(1);
+  });
+
+  // Store the reference to the child process
+  this.runningCommand = proc;
+};
+
+/**
+ * Normalize `args`, splitting joined short flags. For example
+ * the arg "-abc" is equivalent to "-a -b -c".
+ * This also normalizes equal sign and splits "--abc=def" into "--abc def".
+ *
+ * @param {Array} args
+ * @return {Array}
+ * @api private
+ */
+
+Command.prototype.normalize = function(args) {
+  var ret = [],
+    arg,
+    lastOpt,
+    index;
+
+  for (var i = 0, len = args.length; i < len; ++i) {
+    arg = args[i];
+    if (i > 0) {
+      lastOpt = this.optionFor(args[i - 1]);
+    }
+
+    if (arg === '--') {
+      // Honor option terminator
+      ret = ret.concat(args.slice(i));
+      break;
+    } else if (lastOpt && lastOpt.required) {
+      ret.push(arg);
+    } else if (arg.length > 1 && arg[0] === '-' && arg[1] !== '-') {
+      arg.slice(1).split('').forEach(function(c) {
+        ret.push('-' + c);
+      });
+    } else if (/^--/.test(arg) && ~(index = arg.indexOf('='))) {
+      ret.push(arg.slice(0, index), arg.slice(index + 1));
+    } else {
+      ret.push(arg);
+    }
+  }
+
+  return ret;
+};
+
+/**
+ * Parse command `args`.
+ *
+ * When listener(s) are available those
+ * callbacks are invoked, otherwise the "*"
+ * event is emitted and those actions are invoked.
+ *
+ * @param {Array} args
+ * @return {Command} for chaining
+ * @api private
+ */
+
+Command.prototype.parseArgs = function(args, unknown) {
+  var name;
+
+  if (args.length) {
+    name = args[0];
+    if (this.listeners('command:' + name).length) {
+      this.emit('command:' + args.shift(), args, unknown);
+    } else {
+      this.emit('command:*', args);
+    }
+  } else {
+    outputHelpIfNecessary(this, unknown);
+
+    // If there were no args and we have unknown options,
+    // then they are extraneous and we need to error.
+    if (unknown.length > 0) {
+      this.unknownOption(unknown[0]);
+    }
+    if (this.commands.length === 0 &&
+        this._args.filter(function(a) { return a.required }).length === 0) {
+      this.emit('command:*');
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return an option matching `arg` if any.
+ *
+ * @param {String} arg
+ * @return {Option}
+ * @api private
+ */
+
+Command.prototype.optionFor = function(arg) {
+  for (var i = 0, len = this.options.length; i < len; ++i) {
+    if (this.options[i].is(arg)) {
+      return this.options[i];
+    }
+  }
+};
+
+/**
+ * Parse options from `argv` returning `argv`
+ * void of these options.
+ *
+ * @param {Array} argv
+ * @return {Array}
+ * @api public
+ */
+
+Command.prototype.parseOptions = function(argv) {
+  var args = [],
+    len = argv.length,
+    literal,
+    option,
+    arg;
+
+  var unknownOptions = [];
+
+  // parse options
+  for (var i = 0; i < len; ++i) {
+    arg = argv[i];
+
+    // literal args after --
+    if (literal) {
+      args.push(arg);
+      continue;
+    }
+
+    if (arg === '--') {
+      literal = true;
+      continue;
+    }
+
+    // find matching Option
+    option = this.optionFor(arg);
+
+    // option is defined
+    if (option) {
+      // requires arg
+      if (option.required) {
+        arg = argv[++i];
+        if (arg == null) return this.optionMissingArgument(option);
+        this.emit('option:' + option.name(), arg);
+      // optional arg
+      } else if (option.optional) {
+        arg = argv[i + 1];
+        if (arg == null || (arg[0] === '-' && arg !== '-')) {
+          arg = null;
+        } else {
+          ++i;
+        }
+        this.emit('option:' + option.name(), arg);
+      // bool
+      } else {
+        this.emit('option:' + option.name());
+      }
+      continue;
+    }
+
+    // looks like an option
+    if (arg.length > 1 && arg[0] === '-') {
+      unknownOptions.push(arg);
+
+      // If the next argument looks like it might be
+      // an argument for this option, we pass it on.
+      // If it isn't, then it'll simply be ignored
+      if ((i + 1) < argv.length && argv[i + 1][0] !== '-') {
+        unknownOptions.push(argv[++i]);
+      }
+      continue;
+    }
+
+    // arg
+    args.push(arg);
+  }
+
+  return { args: args, unknown: unknownOptions };
+};
+
+/**
+ * Return an object containing options as key-value pairs
+ *
+ * @return {Object}
+ * @api public
+ */
+Command.prototype.opts = function() {
+  var result = {},
+    len = this.options.length;
+
+  for (var i = 0; i < len; i++) {
+    var key = this.options[i].attributeName();
+    result[key] = key === this._versionOptionName ? this._version : this[key];
+  }
+  return result;
+};
+
+/**
+ * Argument `name` is missing.
+ *
+ * @param {String} name
+ * @api private
+ */
+
+Command.prototype.missingArgument = function(name) {
+  console.error("error: missing required argument `%s'", name);
+  process.exit(1);
+};
+
+/**
+ * `Option` is missing an argument, but received `flag` or nothing.
+ *
+ * @param {String} option
+ * @param {String} flag
+ * @api private
+ */
+
+Command.prototype.optionMissingArgument = function(option, flag) {
+  if (flag) {
+    console.error("error: option `%s' argument missing, got `%s'", option.flags, flag);
+  } else {
+    console.error("error: option `%s' argument missing", option.flags);
+  }
+  process.exit(1);
+};
+
+/**
+ * Unknown option `flag`.
+ *
+ * @param {String} flag
+ * @api private
+ */
+
+Command.prototype.unknownOption = function(flag) {
+  if (this._allowUnknownOption) return;
+  console.error("error: unknown option `%s'", flag);
+  process.exit(1);
+};
+
+/**
+ * Variadic argument with `name` is not the last argument as required.
+ *
+ * @param {String} name
+ * @api private
+ */
+
+Command.prototype.variadicArgNotLast = function(name) {
+  console.error("error: variadic arguments must be last `%s'", name);
+  process.exit(1);
+};
+
+/**
+ * Set the program version to `str`.
+ *
+ * This method auto-registers the "-V, --version" flag
+ * which will print the version number when passed.
+ *
+ * @param {String} str
+ * @param {String} [flags]
+ * @return {Command} for chaining
+ * @api public
+ */
+
+Command.prototype.version = function(str, flags) {
+  if (arguments.length === 0) return this._version;
+  this._version = str;
+  flags = flags || '-V, --version';
+  var versionOption = new Option(flags, 'output the version number');
+  this._versionOptionName = versionOption.long.substr(2) || 'version';
+  this.options.push(versionOption);
+  this.on('option:' + this._versionOptionName, function() {
+    process.stdout.write(str + '\n');
+    process.exit(0);
+  });
+  return this;
+};
+
+/**
+ * Set the description to `str`.
+ *
+ * @param {String} str
+ * @param {Object} argsDescription
+ * @return {String|Command}
+ * @api public
+ */
+
+Command.prototype.description = function(str, argsDescription) {
+  if (arguments.length === 0) return this._description;
+  this._description = str;
+  this._argsDescription = argsDescription;
+  return this;
+};
+
+/**
+ * Set an alias for the command
+ *
+ * @param {String} alias
+ * @return {String|Command}
+ * @api public
+ */
+
+Command.prototype.alias = function(alias) {
+  var command = this;
+  if (this.commands.length !== 0) {
+    command = this.commands[this.commands.length - 1];
+  }
+
+  if (arguments.length === 0) return command._alias;
+
+  if (alias === command._name) throw new Error('Command alias can\'t be the same as its name');
+
+  command._alias = alias;
+  return this;
+};
+
+/**
+ * Set / get the command usage `str`.
+ *
+ * @param {String} str
+ * @return {String|Command}
+ * @api public
+ */
+
+Command.prototype.usage = function(str) {
+  var args = this._args.map(function(arg) {
+    return humanReadableArgName(arg);
+  });
+
+  var usage = '[options]' +
+    (this.commands.length ? ' [command]' : '') +
+    (this._args.length ? ' ' + args.join(' ') : '');
+
+  if (arguments.length === 0) return this._usage || usage;
+  this._usage = str;
+
+  return this;
+};
+
+/**
+ * Get or set the name of the command
+ *
+ * @param {String} str
+ * @return {String|Command}
+ * @api public
+ */
+
+Command.prototype.name = function(str) {
+  if (arguments.length === 0) return this._name;
+  this._name = str;
+  return this;
+};
+
+/**
+ * Return prepared commands.
+ *
+ * @return {Array}
+ * @api private
+ */
+
+Command.prototype.prepareCommands = function() {
+  return this.commands.filter(function(cmd) {
+    return !cmd._noHelp;
+  }).map(function(cmd) {
+    var args = cmd._args.map(function(arg) {
+      return humanReadableArgName(arg);
+    }).join(' ');
+
+    return [
+      cmd._name +
+        (cmd._alias ? '|' + cmd._alias : '') +
+        (cmd.options.length ? ' [options]' : '') +
+        (args ? ' ' + args : ''),
+      cmd._description
+    ];
+  });
+};
+
+/**
+ * Return the largest command length.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+Command.prototype.largestCommandLength = function() {
+  var commands = this.prepareCommands();
+  return commands.reduce(function(max, command) {
+    return Math.max(max, command[0].length);
+  }, 0);
+};
+
+/**
+ * Return the largest option length.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+Command.prototype.largestOptionLength = function() {
+  var options = [].slice.call(this.options);
+  options.push({
+    flags: '-h, --help'
+  });
+  return options.reduce(function(max, option) {
+    return Math.max(max, option.flags.length);
+  }, 0);
+};
+
+/**
+ * Return the largest arg length.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+Command.prototype.largestArgLength = function() {
+  return this._args.reduce(function(max, arg) {
+    return Math.max(max, arg.name.length);
+  }, 0);
+};
+
+/**
+ * Return the pad width.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+Command.prototype.padWidth = function() {
+  var width = this.largestOptionLength();
+  if (this._argsDescription && this._args.length) {
+    if (this.largestArgLength() > width) {
+      width = this.largestArgLength();
+    }
+  }
+
+  if (this.commands && this.commands.length) {
+    if (this.largestCommandLength() > width) {
+      width = this.largestCommandLength();
+    }
+  }
+
+  return width;
+};
+
+/**
+ * Return help for options.
+ *
+ * @return {String}
+ * @api private
+ */
+
+Command.prototype.optionHelp = function() {
+  var width = this.padWidth();
+
+  // Append the help information
+  return this.options.map(function(option) {
+    return pad(option.flags, width) + '  ' + option.description +
+      ((option.bool && option.defaultValue !== undefined) ? ' (default: ' + JSON.stringify(option.defaultValue) + ')' : '');
+  }).concat([pad('-h, --help', width) + '  ' + 'output usage information'])
+    .join('\n');
+};
+
+/**
+ * Return command help documentation.
+ *
+ * @return {String}
+ * @api private
+ */
+
+Command.prototype.commandHelp = function() {
+  if (!this.commands.length) return '';
+
+  var commands = this.prepareCommands();
+  var width = this.padWidth();
+
+  return [
+    'Commands:',
+    commands.map(function(cmd) {
+      var desc = cmd[1] ? '  ' + cmd[1] : '';
+      return (desc ? pad(cmd[0], width) : cmd[0]) + desc;
+    }).join('\n').replace(/^/gm, '  '),
+    ''
+  ].join('\n');
+};
+
+/**
+ * Return program help documentation.
+ *
+ * @return {String}
+ * @api private
+ */
+
+Command.prototype.helpInformation = function() {
+  var desc = [];
+  if (this._description) {
+    desc = [
+      this._description,
+      ''
+    ];
+
+    var argsDescription = this._argsDescription;
+    if (argsDescription && this._args.length) {
+      var width = this.padWidth();
+      desc.push('Arguments:');
+      desc.push('');
+      this._args.forEach(function(arg) {
+        desc.push('  ' + pad(arg.name, width) + '  ' + argsDescription[arg.name]);
+      });
+      desc.push('');
+    }
+  }
+
+  var cmdName = this._name;
+  if (this._alias) {
+    cmdName = cmdName + '|' + this._alias;
+  }
+  var usage = [
+    'Usage: ' + cmdName + ' ' + this.usage(),
+    ''
+  ];
+
+  var cmds = [];
+  var commandHelp = this.commandHelp();
+  if (commandHelp) cmds = [commandHelp];
+
+  var options = [
+    'Options:',
+    '' + this.optionHelp().replace(/^/gm, '  '),
+    ''
+  ];
+
+  return usage
+    .concat(desc)
+    .concat(options)
+    .concat(cmds)
+    .join('\n');
+};
+
+/**
+ * Output help information for this command
+ *
+ * @api public
+ */
+
+Command.prototype.outputHelp = function(cb) {
+  if (!cb) {
+    cb = function(passthru) {
+      return passthru;
+    };
+  }
+  process.stdout.write(cb(this.helpInformation()));
+  this.emit('--help');
+};
+
+/**
+ * Output help information and exit.
+ *
+ * @api public
+ */
+
+Command.prototype.help = function(cb) {
+  this.outputHelp(cb);
+  process.exit();
+};
+
+/**
+ * Camel-case the given `flag`
+ *
+ * @param {String} flag
+ * @return {String}
+ * @api private
+ */
+
+function camelcase(flag) {
+  return flag.split('-').reduce(function(str, word) {
+    return str + word[0].toUpperCase() + word.slice(1);
+  });
 }
 
-module.exports = nodebackForPromise;
+/**
+ * Pad `str` to `width`.
+ *
+ * @param {String} str
+ * @param {Number} width
+ * @return {String}
+ * @api private
+ */
+
+function pad(str, width) {
+  var len = Math.max(0, width - str.length);
+  return str + Array(len + 1).join(' ');
+}
+
+/**
+ * Output help information if necessary
+ *
+ * @param {Command} command to output help for
+ * @param {Array} array of options to search for -h or --help
+ * @api private
+ */
+
+function outputHelpIfNecessary(cmd, options) {
+  options = options || [];
+  for (var i = 0; i < options.length; i++) {
+    if (options[i] === '--help' || options[i] === '-h') {
+      cmd.outputHelp();
+      process.exit(0);
+    }
+  }
+}
+
+/**
+ * Takes an argument an returns its human readable equivalent for help usage.
+ *
+ * @param {Object} arg
+ * @return {String}
+ * @api private
+ */
+
+function humanReadableArgName(arg) {
+  var nameOutput = arg.name + (arg.variadic === true ? '...' : '');
+
+  return arg.required
+    ? '<' + nameOutput + '>'
+    : '[' + nameOutput + ']';
+}
+
+// for versions before node v0.8 when there weren't `fs.existsSync`
+function exists(file) {
+  try {
+    if (fs.statSync(file).isFile()) {
+      return true;
+    }
+  } catch (e) {
+    return false;
+  }
+}
 
 
 /***/ }),
-/* 21 */
+/* 12 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -21238,11 +21055,11 @@ module.exports = nodebackForPromise;
 module.exports = OneOf;
 
 // extends ReflectionObject
-var ReflectionObject = __webpack_require__(15);
+var ReflectionObject = __webpack_require__(8);
 ((OneOf.prototype = Object.create(ReflectionObject.prototype)).constructor = OneOf).className = "OneOf";
 
-var Field = __webpack_require__(14),
-    util  = __webpack_require__(9);
+var Field = __webpack_require__(7),
+    util  = __webpack_require__(2);
 
 /**
  * Constructs a new oneof instance.
@@ -21440,14 +21257,205 @@ OneOf.d = function decorateOneOf() {
 
 
 /***/ }),
-/* 22 */
+/* 13 */
+/***/ (function(module, exports) {
+
+module.exports = require("fs");
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/*! Case - v1.6.0 - 2018-11-15
+* Copyright (c) 2018 Nathan Bubna; Licensed MIT, GPL */
+(function() {
+    "use strict";
+    var unicodes = function(s, prefix) {
+        prefix = prefix || '';
+        return s.replace(/(^|-)/g, '$1\\u'+prefix).replace(/,/g, '\\u'+prefix);
+    },
+    basicSymbols = unicodes('20-26,28-2F,3A-40,5B-60,7B-7E,A0-BF,D7,F7', '00'),
+    baseLowerCase = 'a-z'+unicodes('DF-F6,F8-FF', '00'),
+    baseUpperCase = 'A-Z'+unicodes('C0-D6,D8-DE', '00'),
+    improperInTitle = 'A|An|And|As|At|But|By|En|For|If|In|Of|On|Or|The|To|Vs?\\.?|Via',
+    regexps = function(symbols, lowers, uppers, impropers) {
+        symbols = symbols || basicSymbols;
+        lowers = lowers || baseLowerCase;
+        uppers = uppers || baseUpperCase;
+        impropers = impropers || improperInTitle;
+        return {
+            capitalize: new RegExp('(^|['+symbols+'])(['+lowers+'])', 'g'),
+            pascal: new RegExp('(^|['+symbols+'])+(['+lowers+uppers+'])', 'g'),
+            fill: new RegExp('['+symbols+']+(.|$)','g'),
+            sentence: new RegExp('(^\\s*|[\\?\\!\\.]+"?\\s+"?|,\\s+")(['+lowers+'])', 'g'),
+            improper: new RegExp('\\b('+impropers+')\\b', 'g'),
+            relax: new RegExp('([^'+uppers+'])(['+uppers+']*)(['+uppers+'])(?=[^'+uppers+']|$)', 'g'),
+            upper: new RegExp('^[^'+lowers+']+$'),
+            hole: /[^\s]\s[^\s]/,
+            apostrophe: /'/g,
+            room: new RegExp('['+symbols+']')
+        };
+    },
+    re = regexps(),
+    _ = {
+        re: re,
+        unicodes: unicodes,
+        regexps: regexps,
+        types: [],
+        up: String.prototype.toUpperCase,
+        low: String.prototype.toLowerCase,
+        cap: function(s) {
+            return _.up.call(s.charAt(0))+s.slice(1);
+        },
+        decap: function(s) {
+            return _.low.call(s.charAt(0))+s.slice(1);
+        },
+        deapostrophe: function(s) {
+            return s.replace(re.apostrophe, '');
+        },
+        fill: function(s, fill, deapostrophe) {
+            if (fill != null) {
+                s = s.replace(re.fill, function(m, next) {
+                    return next ? fill + next : '';
+                });
+            }
+            if (deapostrophe) {
+                s = _.deapostrophe(s);
+            }
+            return s;
+        },
+        prep: function(s, fill, pascal, upper) {
+            s = s == null ? '' : s + '';// force to string
+            if (!upper && re.upper.test(s)) {
+                s = _.low.call(s);
+            }
+            if (!fill && !re.hole.test(s)) {
+                var holey = _.fill(s, ' ');
+                if (re.hole.test(holey)) {
+                    s = holey;
+                }
+            }
+            if (!pascal && !re.room.test(s)) {
+                s = s.replace(re.relax, _.relax);
+            }
+            return s;
+        },
+        relax: function(m, before, acronym, caps) {
+            return before + ' ' + (acronym ? acronym+' ' : '') + caps;
+        }
+    },
+    Case = {
+        _: _,
+        of: function(s) {
+            for (var i=0,m=_.types.length; i<m; i++) {
+                if (Case[_.types[i]].apply(Case, arguments) === s){ return _.types[i]; }
+            }
+        },
+        flip: function(s) {
+            return s.replace(/\w/g, function(l) {
+                return (l == _.up.call(l) ? _.low : _.up).call(l);
+            });
+        },
+        random: function(s) {
+            return s.replace(/\w/g, function(l) {
+                return (Math.round(Math.random()) ? _.up : _.low).call(l);
+            });
+        },
+        type: function(type, fn) {
+            Case[type] = fn;
+            _.types.push(type);
+        }
+    },
+    types = {
+        lower: function(s, fill, deapostrophe) {
+            return _.fill(_.low.call(_.prep(s, fill)), fill, deapostrophe);
+        },
+        snake: function(s) {
+            return Case.lower(s, '_', true);
+        },
+        constant: function(s) {
+            return Case.upper(s, '_', true);
+        },
+        camel: function(s) {
+            return _.decap(Case.pascal(s));
+        },
+        kebab: function(s) {
+            return Case.lower(s, '-', true);
+        },
+        upper: function(s, fill, deapostrophe) {
+            return _.fill(_.up.call(_.prep(s, fill, false, true)), fill, deapostrophe);
+        },
+        capital: function(s, fill, deapostrophe) {
+            return _.fill(_.prep(s).replace(re.capitalize, function(m, border, letter) {
+                return border+_.up.call(letter);
+            }), fill, deapostrophe);
+        },
+        header: function(s) {
+            return Case.capital(s, '-', true);
+        },
+        pascal: function(s) {
+            return _.fill(_.prep(s, false, true).replace(re.pascal, function(m, border, letter) {
+                return _.up.call(letter);
+            }), '', true);
+        },
+        title: function(s) {
+            return Case.capital(s).replace(re.improper, function(small, p, i, s) {
+                return i > 0 && i < s.lastIndexOf(' ') ? _.low.call(small) : small;
+            });
+        },
+        sentence: function(s, names, abbreviations) {
+            s = Case.lower(s).replace(re.sentence, function(m, prelude, letter) {
+                return prelude + _.up.call(letter);
+            });
+            if (names) {
+                names.forEach(function(name) {
+                    s = s.replace(new RegExp('\\b'+Case.lower(name)+'\\b', "g"), _.cap);
+                });
+            }
+            if (abbreviations) {
+                abbreviations.forEach(function(abbr) {
+                    s = s.replace(new RegExp('(\\b'+Case.lower(abbr)+'\\. +)(\\w)'), function(m, abbrAndSpace, letter) {
+                        return abbrAndSpace + _.low.call(letter);
+                    });
+                });
+            }
+            return s;
+        }
+    };
+
+    // TODO: Remove "squish" in a future breaking release.
+    types.squish = types.pascal;
+
+    for (var type in types) {
+        Case.type(type, types[type]);
+    }
+    // export Case (AMD, commonjs, or global)
+    var define = typeof define === "function" ? define : function(){};
+    define( true && module.exports ? module.exports = Case : this.Case = Case);
+
+}).call(this);
+
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+// full library entry point.
+
+
+module.exports = __webpack_require__(72);
+
+
+/***/ }),
+/* 16 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = Writer;
 
-var util      = __webpack_require__(13);
+var util      = __webpack_require__(4);
 
 var BufferWriter; // cyclic
 
@@ -21906,14 +21914,14 @@ Writer._configure = function(BufferWriter_) {
 
 
 /***/ }),
-/* 23 */
+/* 17 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = Reader;
 
-var util      = __webpack_require__(13);
+var util      = __webpack_require__(4);
 
 var BufferReader; // cyclic
 
@@ -22318,7 +22326,3095 @@ Reader._configure = function(BufferReader_) {
 
 
 /***/ }),
+/* 18 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Type;
+
+// extends Namespace
+var Namespace = __webpack_require__(10);
+((Type.prototype = Object.create(Namespace.prototype)).constructor = Type).className = "Type";
+
+var Enum      = __webpack_require__(3),
+    OneOf     = __webpack_require__(12),
+    Field     = __webpack_require__(7),
+    MapField  = __webpack_require__(19),
+    Service   = __webpack_require__(20),
+    Message   = __webpack_require__(22),
+    Reader    = __webpack_require__(17),
+    Writer    = __webpack_require__(16),
+    util      = __webpack_require__(2),
+    encoder   = __webpack_require__(31),
+    decoder   = __webpack_require__(32),
+    verifier  = __webpack_require__(33),
+    converter = __webpack_require__(34),
+    wrappers  = __webpack_require__(35);
+
+/**
+ * Constructs a new reflected message type instance.
+ * @classdesc Reflected message type.
+ * @extends NamespaceBase
+ * @constructor
+ * @param {string} name Message name
+ * @param {Object.<string,*>} [options] Declared options
+ */
+function Type(name, options) {
+    Namespace.call(this, name, options);
+
+    /**
+     * Message fields.
+     * @type {Object.<string,Field>}
+     */
+    this.fields = {};  // toJSON, marker
+
+    /**
+     * Oneofs declared within this namespace, if any.
+     * @type {Object.<string,OneOf>}
+     */
+    this.oneofs = undefined; // toJSON
+
+    /**
+     * Extension ranges, if any.
+     * @type {number[][]}
+     */
+    this.extensions = undefined; // toJSON
+
+    /**
+     * Reserved ranges, if any.
+     * @type {Array.<number[]|string>}
+     */
+    this.reserved = undefined; // toJSON
+
+    /*?
+     * Whether this type is a legacy group.
+     * @type {boolean|undefined}
+     */
+    this.group = undefined; // toJSON
+
+    /**
+     * Cached fields by id.
+     * @type {Object.<number,Field>|null}
+     * @private
+     */
+    this._fieldsById = null;
+
+    /**
+     * Cached fields as an array.
+     * @type {Field[]|null}
+     * @private
+     */
+    this._fieldsArray = null;
+
+    /**
+     * Cached oneofs as an array.
+     * @type {OneOf[]|null}
+     * @private
+     */
+    this._oneofsArray = null;
+
+    /**
+     * Cached constructor.
+     * @type {Constructor<{}>}
+     * @private
+     */
+    this._ctor = null;
+}
+
+Object.defineProperties(Type.prototype, {
+
+    /**
+     * Message fields by id.
+     * @name Type#fieldsById
+     * @type {Object.<number,Field>}
+     * @readonly
+     */
+    fieldsById: {
+        get: function() {
+
+            /* istanbul ignore if */
+            if (this._fieldsById)
+                return this._fieldsById;
+
+            this._fieldsById = {};
+            for (var names = Object.keys(this.fields), i = 0; i < names.length; ++i) {
+                var field = this.fields[names[i]],
+                    id = field.id;
+
+                /* istanbul ignore if */
+                if (this._fieldsById[id])
+                    throw Error("duplicate id " + id + " in " + this);
+
+                this._fieldsById[id] = field;
+            }
+            return this._fieldsById;
+        }
+    },
+
+    /**
+     * Fields of this message as an array for iteration.
+     * @name Type#fieldsArray
+     * @type {Field[]}
+     * @readonly
+     */
+    fieldsArray: {
+        get: function() {
+            return this._fieldsArray || (this._fieldsArray = util.toArray(this.fields));
+        }
+    },
+
+    /**
+     * Oneofs of this message as an array for iteration.
+     * @name Type#oneofsArray
+     * @type {OneOf[]}
+     * @readonly
+     */
+    oneofsArray: {
+        get: function() {
+            return this._oneofsArray || (this._oneofsArray = util.toArray(this.oneofs));
+        }
+    },
+
+    /**
+     * The registered constructor, if any registered, otherwise a generic constructor.
+     * Assigning a function replaces the internal constructor. If the function does not extend {@link Message} yet, its prototype will be setup accordingly and static methods will be populated. If it already extends {@link Message}, it will just replace the internal constructor.
+     * @name Type#ctor
+     * @type {Constructor<{}>}
+     */
+    ctor: {
+        get: function() {
+            return this._ctor || (this.ctor = Type.generateConstructor(this)());
+        },
+        set: function(ctor) {
+
+            // Ensure proper prototype
+            var prototype = ctor.prototype;
+            if (!(prototype instanceof Message)) {
+                (ctor.prototype = new Message()).constructor = ctor;
+                util.merge(ctor.prototype, prototype);
+            }
+
+            // Classes and messages reference their reflected type
+            ctor.$type = ctor.prototype.$type = this;
+
+            // Mix in static methods
+            util.merge(ctor, Message, true);
+
+            this._ctor = ctor;
+
+            // Messages have non-enumerable default values on their prototype
+            var i = 0;
+            for (; i < /* initializes */ this.fieldsArray.length; ++i)
+                this._fieldsArray[i].resolve(); // ensures a proper value
+
+            // Messages have non-enumerable getters and setters for each virtual oneof field
+            var ctorProperties = {};
+            for (i = 0; i < /* initializes */ this.oneofsArray.length; ++i)
+                ctorProperties[this._oneofsArray[i].resolve().name] = {
+                    get: util.oneOfGetter(this._oneofsArray[i].oneof),
+                    set: util.oneOfSetter(this._oneofsArray[i].oneof)
+                };
+            if (i)
+                Object.defineProperties(ctor.prototype, ctorProperties);
+        }
+    }
+});
+
+/**
+ * Generates a constructor function for the specified type.
+ * @param {Type} mtype Message type
+ * @returns {Codegen} Codegen instance
+ */
+Type.generateConstructor = function generateConstructor(mtype) {
+    /* eslint-disable no-unexpected-multiline */
+    var gen = util.codegen(["p"], mtype.name);
+    // explicitly initialize mutable object/array fields so that these aren't just inherited from the prototype
+    for (var i = 0, field; i < mtype.fieldsArray.length; ++i)
+        if ((field = mtype._fieldsArray[i]).map) gen
+            ("this%s={}", util.safeProp(field.name));
+        else if (field.repeated) gen
+            ("this%s=[]", util.safeProp(field.name));
+    return gen
+    ("if(p)for(var ks=Object.keys(p),i=0;i<ks.length;++i)if(p[ks[i]]!=null)") // omit undefined or null
+        ("this[ks[i]]=p[ks[i]]");
+    /* eslint-enable no-unexpected-multiline */
+};
+
+function clearCache(type) {
+    type._fieldsById = type._fieldsArray = type._oneofsArray = null;
+    delete type.encode;
+    delete type.decode;
+    delete type.verify;
+    return type;
+}
+
+/**
+ * Message type descriptor.
+ * @interface IType
+ * @extends INamespace
+ * @property {Object.<string,IOneOf>} [oneofs] Oneof descriptors
+ * @property {Object.<string,IField>} fields Field descriptors
+ * @property {number[][]} [extensions] Extension ranges
+ * @property {number[][]} [reserved] Reserved ranges
+ * @property {boolean} [group=false] Whether a legacy group or not
+ */
+
+/**
+ * Creates a message type from a message type descriptor.
+ * @param {string} name Message name
+ * @param {IType} json Message type descriptor
+ * @returns {Type} Created message type
+ */
+Type.fromJSON = function fromJSON(name, json) {
+    var type = new Type(name, json.options);
+    type.extensions = json.extensions;
+    type.reserved = json.reserved;
+    var names = Object.keys(json.fields),
+        i = 0;
+    for (; i < names.length; ++i)
+        type.add(
+            ( typeof json.fields[names[i]].keyType !== "undefined"
+            ? MapField.fromJSON
+            : Field.fromJSON )(names[i], json.fields[names[i]])
+        );
+    if (json.oneofs)
+        for (names = Object.keys(json.oneofs), i = 0; i < names.length; ++i)
+            type.add(OneOf.fromJSON(names[i], json.oneofs[names[i]]));
+    if (json.nested)
+        for (names = Object.keys(json.nested), i = 0; i < names.length; ++i) {
+            var nested = json.nested[names[i]];
+            type.add( // most to least likely
+                ( nested.id !== undefined
+                ? Field.fromJSON
+                : nested.fields !== undefined
+                ? Type.fromJSON
+                : nested.values !== undefined
+                ? Enum.fromJSON
+                : nested.methods !== undefined
+                ? Service.fromJSON
+                : Namespace.fromJSON )(names[i], nested)
+            );
+        }
+    if (json.extensions && json.extensions.length)
+        type.extensions = json.extensions;
+    if (json.reserved && json.reserved.length)
+        type.reserved = json.reserved;
+    if (json.group)
+        type.group = true;
+    if (json.comment)
+        type.comment = json.comment;
+    return type;
+};
+
+/**
+ * Converts this message type to a message type descriptor.
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {IType} Message type descriptor
+ */
+Type.prototype.toJSON = function toJSON(toJSONOptions) {
+    var inherited = Namespace.prototype.toJSON.call(this, toJSONOptions);
+    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
+    return util.toObject([
+        "options"    , inherited && inherited.options || undefined,
+        "oneofs"     , Namespace.arrayToJSON(this.oneofsArray, toJSONOptions),
+        "fields"     , Namespace.arrayToJSON(this.fieldsArray.filter(function(obj) { return !obj.declaringField; }), toJSONOptions) || {},
+        "extensions" , this.extensions && this.extensions.length ? this.extensions : undefined,
+        "reserved"   , this.reserved && this.reserved.length ? this.reserved : undefined,
+        "group"      , this.group || undefined,
+        "nested"     , inherited && inherited.nested || undefined,
+        "comment"    , keepComments ? this.comment : undefined
+    ]);
+};
+
+/**
+ * @override
+ */
+Type.prototype.resolveAll = function resolveAll() {
+    var fields = this.fieldsArray, i = 0;
+    while (i < fields.length)
+        fields[i++].resolve();
+    var oneofs = this.oneofsArray; i = 0;
+    while (i < oneofs.length)
+        oneofs[i++].resolve();
+    return Namespace.prototype.resolveAll.call(this);
+};
+
+/**
+ * @override
+ */
+Type.prototype.get = function get(name) {
+    return this.fields[name]
+        || this.oneofs && this.oneofs[name]
+        || this.nested && this.nested[name]
+        || null;
+};
+
+/**
+ * Adds a nested object to this type.
+ * @param {ReflectionObject} object Nested object to add
+ * @returns {Type} `this`
+ * @throws {TypeError} If arguments are invalid
+ * @throws {Error} If there is already a nested object with this name or, if a field, when there is already a field with this id
+ */
+Type.prototype.add = function add(object) {
+
+    if (this.get(object.name))
+        throw Error("duplicate name '" + object.name + "' in " + this);
+
+    if (object instanceof Field && object.extend === undefined) {
+        // NOTE: Extension fields aren't actual fields on the declaring type, but nested objects.
+        // The root object takes care of adding distinct sister-fields to the respective extended
+        // type instead.
+
+        // avoids calling the getter if not absolutely necessary because it's called quite frequently
+        if (this._fieldsById ? /* istanbul ignore next */ this._fieldsById[object.id] : this.fieldsById[object.id])
+            throw Error("duplicate id " + object.id + " in " + this);
+        if (this.isReservedId(object.id))
+            throw Error("id " + object.id + " is reserved in " + this);
+        if (this.isReservedName(object.name))
+            throw Error("name '" + object.name + "' is reserved in " + this);
+
+        if (object.parent)
+            object.parent.remove(object);
+        this.fields[object.name] = object;
+        object.message = this;
+        object.onAdd(this);
+        return clearCache(this);
+    }
+    if (object instanceof OneOf) {
+        if (!this.oneofs)
+            this.oneofs = {};
+        this.oneofs[object.name] = object;
+        object.onAdd(this);
+        return clearCache(this);
+    }
+    return Namespace.prototype.add.call(this, object);
+};
+
+/**
+ * Removes a nested object from this type.
+ * @param {ReflectionObject} object Nested object to remove
+ * @returns {Type} `this`
+ * @throws {TypeError} If arguments are invalid
+ * @throws {Error} If `object` is not a member of this type
+ */
+Type.prototype.remove = function remove(object) {
+    if (object instanceof Field && object.extend === undefined) {
+        // See Type#add for the reason why extension fields are excluded here.
+
+        /* istanbul ignore if */
+        if (!this.fields || this.fields[object.name] !== object)
+            throw Error(object + " is not a member of " + this);
+
+        delete this.fields[object.name];
+        object.parent = null;
+        object.onRemove(this);
+        return clearCache(this);
+    }
+    if (object instanceof OneOf) {
+
+        /* istanbul ignore if */
+        if (!this.oneofs || this.oneofs[object.name] !== object)
+            throw Error(object + " is not a member of " + this);
+
+        delete this.oneofs[object.name];
+        object.parent = null;
+        object.onRemove(this);
+        return clearCache(this);
+    }
+    return Namespace.prototype.remove.call(this, object);
+};
+
+/**
+ * Tests if the specified id is reserved.
+ * @param {number} id Id to test
+ * @returns {boolean} `true` if reserved, otherwise `false`
+ */
+Type.prototype.isReservedId = function isReservedId(id) {
+    return Namespace.isReservedId(this.reserved, id);
+};
+
+/**
+ * Tests if the specified name is reserved.
+ * @param {string} name Name to test
+ * @returns {boolean} `true` if reserved, otherwise `false`
+ */
+Type.prototype.isReservedName = function isReservedName(name) {
+    return Namespace.isReservedName(this.reserved, name);
+};
+
+/**
+ * Creates a new message of this type using the specified properties.
+ * @param {Object.<string,*>} [properties] Properties to set
+ * @returns {Message<{}>} Message instance
+ */
+Type.prototype.create = function create(properties) {
+    return new this.ctor(properties);
+};
+
+/**
+ * Sets up {@link Type#encode|encode}, {@link Type#decode|decode} and {@link Type#verify|verify}.
+ * @returns {Type} `this`
+ */
+Type.prototype.setup = function setup() {
+    // Sets up everything at once so that the prototype chain does not have to be re-evaluated
+    // multiple times (V8, soft-deopt prototype-check).
+
+    var fullName = this.fullName,
+        types    = [];
+    for (var i = 0; i < /* initializes */ this.fieldsArray.length; ++i)
+        types.push(this._fieldsArray[i].resolve().resolvedType);
+
+    // Replace setup methods with type-specific generated functions
+    this.encode = encoder(this)({
+        Writer : Writer,
+        types  : types,
+        util   : util
+    });
+    this.decode = decoder(this)({
+        Reader : Reader,
+        types  : types,
+        util   : util
+    });
+    this.verify = verifier(this)({
+        types : types,
+        util  : util
+    });
+    this.fromObject = converter.fromObject(this)({
+        types : types,
+        util  : util
+    });
+    this.toObject = converter.toObject(this)({
+        types : types,
+        util  : util
+    });
+
+    // Inject custom wrappers for common types
+    var wrapper = wrappers[fullName];
+    if (wrapper) {
+        var originalThis = Object.create(this);
+        // if (wrapper.fromObject) {
+            originalThis.fromObject = this.fromObject;
+            this.fromObject = wrapper.fromObject.bind(originalThis);
+        // }
+        // if (wrapper.toObject) {
+            originalThis.toObject = this.toObject;
+            this.toObject = wrapper.toObject.bind(originalThis);
+        // }
+    }
+
+    return this;
+};
+
+/**
+ * Encodes a message of this type. Does not implicitly {@link Type#verify|verify} messages.
+ * @param {Message<{}>|Object.<string,*>} message Message instance or plain object
+ * @param {Writer} [writer] Writer to encode to
+ * @returns {Writer} writer
+ */
+Type.prototype.encode = function encode_setup(message, writer) {
+    return this.setup().encode(message, writer); // overrides this method
+};
+
+/**
+ * Encodes a message of this type preceeded by its byte length as a varint. Does not implicitly {@link Type#verify|verify} messages.
+ * @param {Message<{}>|Object.<string,*>} message Message instance or plain object
+ * @param {Writer} [writer] Writer to encode to
+ * @returns {Writer} writer
+ */
+Type.prototype.encodeDelimited = function encodeDelimited(message, writer) {
+    return this.encode(message, writer && writer.len ? writer.fork() : writer).ldelim();
+};
+
+/**
+ * Decodes a message of this type.
+ * @param {Reader|Uint8Array} reader Reader or buffer to decode from
+ * @param {number} [length] Length of the message, if known beforehand
+ * @returns {Message<{}>} Decoded message
+ * @throws {Error} If the payload is not a reader or valid buffer
+ * @throws {util.ProtocolError<{}>} If required fields are missing
+ */
+Type.prototype.decode = function decode_setup(reader, length) {
+    return this.setup().decode(reader, length); // overrides this method
+};
+
+/**
+ * Decodes a message of this type preceeded by its byte length as a varint.
+ * @param {Reader|Uint8Array} reader Reader or buffer to decode from
+ * @returns {Message<{}>} Decoded message
+ * @throws {Error} If the payload is not a reader or valid buffer
+ * @throws {util.ProtocolError} If required fields are missing
+ */
+Type.prototype.decodeDelimited = function decodeDelimited(reader) {
+    if (!(reader instanceof Reader))
+        reader = Reader.create(reader);
+    return this.decode(reader, reader.uint32());
+};
+
+/**
+ * Verifies that field values are valid and that required fields are present.
+ * @param {Object.<string,*>} message Plain object to verify
+ * @returns {null|string} `null` if valid, otherwise the reason why it is not
+ */
+Type.prototype.verify = function verify_setup(message) {
+    return this.setup().verify(message); // overrides this method
+};
+
+/**
+ * Creates a new message of this type from a plain object. Also converts values to their respective internal types.
+ * @param {Object.<string,*>} object Plain object to convert
+ * @returns {Message<{}>} Message instance
+ */
+Type.prototype.fromObject = function fromObject(object) {
+    return this.setup().fromObject(object);
+};
+
+/**
+ * Conversion options as used by {@link Type#toObject} and {@link Message.toObject}.
+ * @interface IConversionOptions
+ * @property {Function} [longs] Long conversion type.
+ * Valid values are `String` and `Number` (the global types).
+ * Defaults to copy the present value, which is a possibly unsafe number without and a {@link Long} with a long library.
+ * @property {Function} [enums] Enum value conversion type.
+ * Only valid value is `String` (the global type).
+ * Defaults to copy the present value, which is the numeric id.
+ * @property {Function} [bytes] Bytes value conversion type.
+ * Valid values are `Array` and (a base64 encoded) `String` (the global types).
+ * Defaults to copy the present value, which usually is a Buffer under node and an Uint8Array in the browser.
+ * @property {boolean} [defaults=false] Also sets default values on the resulting object
+ * @property {boolean} [arrays=false] Sets empty arrays for missing repeated fields even if `defaults=false`
+ * @property {boolean} [objects=false] Sets empty objects for missing map fields even if `defaults=false`
+ * @property {boolean} [oneofs=false] Includes virtual oneof properties set to the present field's name, if any
+ * @property {boolean} [json=false] Performs additional JSON compatibility conversions, i.e. NaN and Infinity to strings
+ */
+
+/**
+ * Creates a plain object from a message of this type. Also converts values to other types if specified.
+ * @param {Message<{}>} message Message instance
+ * @param {IConversionOptions} [options] Conversion options
+ * @returns {Object.<string,*>} Plain object
+ */
+Type.prototype.toObject = function toObject(message, options) {
+    return this.setup().toObject(message, options);
+};
+
+/**
+ * Decorator function as returned by {@link Type.d} (TypeScript).
+ * @typedef TypeDecorator
+ * @type {function}
+ * @param {Constructor<T>} target Target constructor
+ * @returns {undefined}
+ * @template T extends Message<T>
+ */
+
+/**
+ * Type decorator (TypeScript).
+ * @param {string} [typeName] Type name, defaults to the constructor's name
+ * @returns {TypeDecorator<T>} Decorator function
+ * @template T extends Message<T>
+ */
+Type.d = function decorateType(typeName) {
+    return function typeDecorator(target) {
+        util.decorateType(target, typeName);
+    };
+};
+
+
+/***/ }),
+/* 19 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = MapField;
+
+// extends Field
+var Field = __webpack_require__(7);
+((MapField.prototype = Object.create(Field.prototype)).constructor = MapField).className = "MapField";
+
+var types   = __webpack_require__(9),
+    util    = __webpack_require__(2);
+
+/**
+ * Constructs a new map field instance.
+ * @classdesc Reflected map field.
+ * @extends FieldBase
+ * @constructor
+ * @param {string} name Unique name within its namespace
+ * @param {number} id Unique id within its namespace
+ * @param {string} keyType Key type
+ * @param {string} type Value type
+ * @param {Object.<string,*>} [options] Declared options
+ * @param {string} [comment] Comment associated with this field
+ */
+function MapField(name, id, keyType, type, options, comment) {
+    Field.call(this, name, id, type, undefined, undefined, options, comment);
+
+    /* istanbul ignore if */
+    if (!util.isString(keyType))
+        throw TypeError("keyType must be a string");
+
+    /**
+     * Key type.
+     * @type {string}
+     */
+    this.keyType = keyType; // toJSON, marker
+
+    /**
+     * Resolved key type if not a basic type.
+     * @type {ReflectionObject|null}
+     */
+    this.resolvedKeyType = null;
+
+    // Overrides Field#map
+    this.map = true;
+}
+
+/**
+ * Map field descriptor.
+ * @interface IMapField
+ * @extends {IField}
+ * @property {string} keyType Key type
+ */
+
+/**
+ * Extension map field descriptor.
+ * @interface IExtensionMapField
+ * @extends IMapField
+ * @property {string} extend Extended type
+ */
+
+/**
+ * Constructs a map field from a map field descriptor.
+ * @param {string} name Field name
+ * @param {IMapField} json Map field descriptor
+ * @returns {MapField} Created map field
+ * @throws {TypeError} If arguments are invalid
+ */
+MapField.fromJSON = function fromJSON(name, json) {
+    return new MapField(name, json.id, json.keyType, json.type, json.options, json.comment);
+};
+
+/**
+ * Converts this map field to a map field descriptor.
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {IMapField} Map field descriptor
+ */
+MapField.prototype.toJSON = function toJSON(toJSONOptions) {
+    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
+    return util.toObject([
+        "keyType" , this.keyType,
+        "type"    , this.type,
+        "id"      , this.id,
+        "extend"  , this.extend,
+        "options" , this.options,
+        "comment" , keepComments ? this.comment : undefined
+    ]);
+};
+
+/**
+ * @override
+ */
+MapField.prototype.resolve = function resolve() {
+    if (this.resolved)
+        return this;
+
+    // Besides a value type, map fields have a key type that may be "any scalar type except for floating point types and bytes"
+    if (types.mapKey[this.keyType] === undefined)
+        throw Error("invalid key type: " + this.keyType);
+
+    return Field.prototype.resolve.call(this);
+};
+
+/**
+ * Map field decorator (TypeScript).
+ * @name MapField.d
+ * @function
+ * @param {number} fieldId Field id
+ * @param {"int32"|"uint32"|"sint32"|"fixed32"|"sfixed32"|"int64"|"uint64"|"sint64"|"fixed64"|"sfixed64"|"bool"|"string"} fieldKeyType Field key type
+ * @param {"double"|"float"|"int32"|"uint32"|"sint32"|"fixed32"|"sfixed32"|"int64"|"uint64"|"sint64"|"fixed64"|"sfixed64"|"bool"|"string"|"bytes"|Object|Constructor<{}>} fieldValueType Field value type
+ * @returns {FieldDecorator} Decorator function
+ * @template T extends { [key: string]: number | Long | string | boolean | Uint8Array | Buffer | number[] | Message<{}> }
+ */
+MapField.d = function decorateMapField(fieldId, fieldKeyType, fieldValueType) {
+
+    // submessage value: decorate the submessage and use its name as the type
+    if (typeof fieldValueType === "function")
+        fieldValueType = util.decorateType(fieldValueType).name;
+
+    // enum reference value: create a reflected copy of the enum and keep reuseing it
+    else if (fieldValueType && typeof fieldValueType === "object")
+        fieldValueType = util.decorateEnum(fieldValueType).name;
+
+    return function mapFieldDecorator(prototype, fieldName) {
+        util.decorateType(prototype.constructor)
+            .add(new MapField(fieldName, fieldId, fieldKeyType, fieldValueType));
+    };
+};
+
+
+/***/ }),
+/* 20 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Service;
+
+// extends Namespace
+var Namespace = __webpack_require__(10);
+((Service.prototype = Object.create(Namespace.prototype)).constructor = Service).className = "Service";
+
+var Method = __webpack_require__(21),
+    util   = __webpack_require__(2),
+    rpc    = __webpack_require__(29);
+
+/**
+ * Constructs a new service instance.
+ * @classdesc Reflected service.
+ * @extends NamespaceBase
+ * @constructor
+ * @param {string} name Service name
+ * @param {Object.<string,*>} [options] Service options
+ * @throws {TypeError} If arguments are invalid
+ */
+function Service(name, options) {
+    Namespace.call(this, name, options);
+
+    /**
+     * Service methods.
+     * @type {Object.<string,Method>}
+     */
+    this.methods = {}; // toJSON, marker
+
+    /**
+     * Cached methods as an array.
+     * @type {Method[]|null}
+     * @private
+     */
+    this._methodsArray = null;
+}
+
+/**
+ * Service descriptor.
+ * @interface IService
+ * @extends INamespace
+ * @property {Object.<string,IMethod>} methods Method descriptors
+ */
+
+/**
+ * Constructs a service from a service descriptor.
+ * @param {string} name Service name
+ * @param {IService} json Service descriptor
+ * @returns {Service} Created service
+ * @throws {TypeError} If arguments are invalid
+ */
+Service.fromJSON = function fromJSON(name, json) {
+    var service = new Service(name, json.options);
+    /* istanbul ignore else */
+    if (json.methods)
+        for (var names = Object.keys(json.methods), i = 0; i < names.length; ++i)
+            service.add(Method.fromJSON(names[i], json.methods[names[i]]));
+    if (json.nested)
+        service.addJSON(json.nested);
+    service.comment = json.comment;
+    return service;
+};
+
+/**
+ * Converts this service to a service descriptor.
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {IService} Service descriptor
+ */
+Service.prototype.toJSON = function toJSON(toJSONOptions) {
+    var inherited = Namespace.prototype.toJSON.call(this, toJSONOptions);
+    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
+    return util.toObject([
+        "options" , inherited && inherited.options || undefined,
+        "methods" , Namespace.arrayToJSON(this.methodsArray, toJSONOptions) || /* istanbul ignore next */ {},
+        "nested"  , inherited && inherited.nested || undefined,
+        "comment" , keepComments ? this.comment : undefined
+    ]);
+};
+
+/**
+ * Methods of this service as an array for iteration.
+ * @name Service#methodsArray
+ * @type {Method[]}
+ * @readonly
+ */
+Object.defineProperty(Service.prototype, "methodsArray", {
+    get: function() {
+        return this._methodsArray || (this._methodsArray = util.toArray(this.methods));
+    }
+});
+
+function clearCache(service) {
+    service._methodsArray = null;
+    return service;
+}
+
+/**
+ * @override
+ */
+Service.prototype.get = function get(name) {
+    return this.methods[name]
+        || Namespace.prototype.get.call(this, name);
+};
+
+/**
+ * @override
+ */
+Service.prototype.resolveAll = function resolveAll() {
+    var methods = this.methodsArray;
+    for (var i = 0; i < methods.length; ++i)
+        methods[i].resolve();
+    return Namespace.prototype.resolve.call(this);
+};
+
+/**
+ * @override
+ */
+Service.prototype.add = function add(object) {
+
+    /* istanbul ignore if */
+    if (this.get(object.name))
+        throw Error("duplicate name '" + object.name + "' in " + this);
+
+    if (object instanceof Method) {
+        this.methods[object.name] = object;
+        object.parent = this;
+        return clearCache(this);
+    }
+    return Namespace.prototype.add.call(this, object);
+};
+
+/**
+ * @override
+ */
+Service.prototype.remove = function remove(object) {
+    if (object instanceof Method) {
+
+        /* istanbul ignore if */
+        if (this.methods[object.name] !== object)
+            throw Error(object + " is not a member of " + this);
+
+        delete this.methods[object.name];
+        object.parent = null;
+        return clearCache(this);
+    }
+    return Namespace.prototype.remove.call(this, object);
+};
+
+/**
+ * Creates a runtime service using the specified rpc implementation.
+ * @param {RPCImpl} rpcImpl RPC implementation
+ * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+ * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+ * @returns {rpc.Service} RPC service. Useful where requests and/or responses are streamed.
+ */
+Service.prototype.create = function create(rpcImpl, requestDelimited, responseDelimited) {
+    var rpcService = new rpc.Service(rpcImpl, requestDelimited, responseDelimited);
+    for (var i = 0, method; i < /* initializes */ this.methodsArray.length; ++i) {
+        var methodName = util.lcFirst((method = this._methodsArray[i]).resolve().name).replace(/[^$\w_]/g, "");
+        rpcService[methodName] = util.codegen(["r","c"], util.isReserved(methodName) ? methodName + "_" : methodName)("return this.rpcCall(m,q,s,r,c)")({
+            m: method,
+            q: method.resolvedRequestType.ctor,
+            s: method.resolvedResponseType.ctor
+        });
+    }
+    return rpcService;
+};
+
+
+/***/ }),
+/* 21 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Method;
+
+// extends ReflectionObject
+var ReflectionObject = __webpack_require__(8);
+((Method.prototype = Object.create(ReflectionObject.prototype)).constructor = Method).className = "Method";
+
+var util = __webpack_require__(2);
+
+/**
+ * Constructs a new service method instance.
+ * @classdesc Reflected service method.
+ * @extends ReflectionObject
+ * @constructor
+ * @param {string} name Method name
+ * @param {string|undefined} type Method type, usually `"rpc"`
+ * @param {string} requestType Request message type
+ * @param {string} responseType Response message type
+ * @param {boolean|Object.<string,*>} [requestStream] Whether the request is streamed
+ * @param {boolean|Object.<string,*>} [responseStream] Whether the response is streamed
+ * @param {Object.<string,*>} [options] Declared options
+ * @param {string} [comment] The comment for this method
+ */
+function Method(name, type, requestType, responseType, requestStream, responseStream, options, comment) {
+
+    /* istanbul ignore next */
+    if (util.isObject(requestStream)) {
+        options = requestStream;
+        requestStream = responseStream = undefined;
+    } else if (util.isObject(responseStream)) {
+        options = responseStream;
+        responseStream = undefined;
+    }
+
+    /* istanbul ignore if */
+    if (!(type === undefined || util.isString(type)))
+        throw TypeError("type must be a string");
+
+    /* istanbul ignore if */
+    if (!util.isString(requestType))
+        throw TypeError("requestType must be a string");
+
+    /* istanbul ignore if */
+    if (!util.isString(responseType))
+        throw TypeError("responseType must be a string");
+
+    ReflectionObject.call(this, name, options);
+
+    /**
+     * Method type.
+     * @type {string}
+     */
+    this.type = type || "rpc"; // toJSON
+
+    /**
+     * Request type.
+     * @type {string}
+     */
+    this.requestType = requestType; // toJSON, marker
+
+    /**
+     * Whether requests are streamed or not.
+     * @type {boolean|undefined}
+     */
+    this.requestStream = requestStream ? true : undefined; // toJSON
+
+    /**
+     * Response type.
+     * @type {string}
+     */
+    this.responseType = responseType; // toJSON
+
+    /**
+     * Whether responses are streamed or not.
+     * @type {boolean|undefined}
+     */
+    this.responseStream = responseStream ? true : undefined; // toJSON
+
+    /**
+     * Resolved request type.
+     * @type {Type|null}
+     */
+    this.resolvedRequestType = null;
+
+    /**
+     * Resolved response type.
+     * @type {Type|null}
+     */
+    this.resolvedResponseType = null;
+
+    /**
+     * Comment for this method
+     * @type {string|null}
+     */
+    this.comment = comment;
+}
+
+/**
+ * Method descriptor.
+ * @interface IMethod
+ * @property {string} [type="rpc"] Method type
+ * @property {string} requestType Request type
+ * @property {string} responseType Response type
+ * @property {boolean} [requestStream=false] Whether requests are streamed
+ * @property {boolean} [responseStream=false] Whether responses are streamed
+ * @property {Object.<string,*>} [options] Method options
+ */
+
+/**
+ * Constructs a method from a method descriptor.
+ * @param {string} name Method name
+ * @param {IMethod} json Method descriptor
+ * @returns {Method} Created method
+ * @throws {TypeError} If arguments are invalid
+ */
+Method.fromJSON = function fromJSON(name, json) {
+    return new Method(name, json.type, json.requestType, json.responseType, json.requestStream, json.responseStream, json.options, json.comment);
+};
+
+/**
+ * Converts this method to a method descriptor.
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {IMethod} Method descriptor
+ */
+Method.prototype.toJSON = function toJSON(toJSONOptions) {
+    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
+    return util.toObject([
+        "type"           , this.type !== "rpc" && /* istanbul ignore next */ this.type || undefined,
+        "requestType"    , this.requestType,
+        "requestStream"  , this.requestStream,
+        "responseType"   , this.responseType,
+        "responseStream" , this.responseStream,
+        "options"        , this.options,
+        "comment"        , keepComments ? this.comment : undefined
+    ]);
+};
+
+/**
+ * @override
+ */
+Method.prototype.resolve = function resolve() {
+
+    /* istanbul ignore if */
+    if (this.resolved)
+        return this;
+
+    this.resolvedRequestType = this.parent.lookupType(this.requestType);
+    this.resolvedResponseType = this.parent.lookupType(this.responseType);
+
+    return ReflectionObject.prototype.resolve.call(this);
+};
+
+
+/***/ }),
+/* 22 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Message;
+
+var util = __webpack_require__(4);
+
+/**
+ * Constructs a new message instance.
+ * @classdesc Abstract runtime message.
+ * @constructor
+ * @param {Properties<T>} [properties] Properties to set
+ * @template T extends object = object
+ */
+function Message(properties) {
+    // not used internally
+    if (properties)
+        for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+            this[keys[i]] = properties[keys[i]];
+}
+
+/**
+ * Reference to the reflected type.
+ * @name Message.$type
+ * @type {Type}
+ * @readonly
+ */
+
+/**
+ * Reference to the reflected type.
+ * @name Message#$type
+ * @type {Type}
+ * @readonly
+ */
+
+/*eslint-disable valid-jsdoc*/
+
+/**
+ * Creates a new message of this type using the specified properties.
+ * @param {Object.<string,*>} [properties] Properties to set
+ * @returns {Message<T>} Message instance
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.create = function create(properties) {
+    return this.$type.create(properties);
+};
+
+/**
+ * Encodes a message of this type.
+ * @param {T|Object.<string,*>} message Message to encode
+ * @param {Writer} [writer] Writer to use
+ * @returns {Writer} Writer
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.encode = function encode(message, writer) {
+    return this.$type.encode(message, writer);
+};
+
+/**
+ * Encodes a message of this type preceeded by its length as a varint.
+ * @param {T|Object.<string,*>} message Message to encode
+ * @param {Writer} [writer] Writer to use
+ * @returns {Writer} Writer
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.encodeDelimited = function encodeDelimited(message, writer) {
+    return this.$type.encodeDelimited(message, writer);
+};
+
+/**
+ * Decodes a message of this type.
+ * @name Message.decode
+ * @function
+ * @param {Reader|Uint8Array} reader Reader or buffer to decode
+ * @returns {T} Decoded message
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.decode = function decode(reader) {
+    return this.$type.decode(reader);
+};
+
+/**
+ * Decodes a message of this type preceeded by its length as a varint.
+ * @name Message.decodeDelimited
+ * @function
+ * @param {Reader|Uint8Array} reader Reader or buffer to decode
+ * @returns {T} Decoded message
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.decodeDelimited = function decodeDelimited(reader) {
+    return this.$type.decodeDelimited(reader);
+};
+
+/**
+ * Verifies a message of this type.
+ * @name Message.verify
+ * @function
+ * @param {Object.<string,*>} message Plain object to verify
+ * @returns {string|null} `null` if valid, otherwise the reason why it is not
+ */
+Message.verify = function verify(message) {
+    return this.$type.verify(message);
+};
+
+/**
+ * Creates a new message of this type from a plain object. Also converts values to their respective internal types.
+ * @param {Object.<string,*>} object Plain object
+ * @returns {T} Message instance
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.fromObject = function fromObject(object) {
+    return this.$type.fromObject(object);
+};
+
+/**
+ * Creates a plain object from a message of this type. Also converts values to other types if specified.
+ * @param {T} message Message instance
+ * @param {IConversionOptions} [options] Conversion options
+ * @returns {Object.<string,*>} Plain object
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.toObject = function toObject(message, options) {
+    return this.$type.toObject(message, options);
+};
+
+/**
+ * Converts this message to JSON.
+ * @returns {Object.<string,*>} JSON object
+ */
+Message.prototype.toJSON = function toJSON() {
+    return this.$type.toObject(this, util.toJSONOptions);
+};
+
+/*eslint-enable valid-jsdoc*/
+
+/***/ }),
+/* 23 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Root;
+
+// extends Namespace
+var Namespace = __webpack_require__(10);
+((Root.prototype = Object.create(Namespace.prototype)).constructor = Root).className = "Root";
+
+var Field   = __webpack_require__(7),
+    Enum    = __webpack_require__(3),
+    OneOf   = __webpack_require__(12),
+    util    = __webpack_require__(2);
+
+var Type,   // cyclic
+    parse,  // might be excluded
+    common; // "
+
+/**
+ * Constructs a new root namespace instance.
+ * @classdesc Root namespace wrapping all types, enums, services, sub-namespaces etc. that belong together.
+ * @extends NamespaceBase
+ * @constructor
+ * @param {Object.<string,*>} [options] Top level options
+ */
+function Root(options) {
+    Namespace.call(this, "", options);
+
+    /**
+     * Deferred extension fields.
+     * @type {Field[]}
+     */
+    this.deferred = [];
+
+    /**
+     * Resolved file names of loaded files.
+     * @type {string[]}
+     */
+    this.files = [];
+}
+
+/**
+ * Loads a namespace descriptor into a root namespace.
+ * @param {INamespace} json Nameespace descriptor
+ * @param {Root} [root] Root namespace, defaults to create a new one if omitted
+ * @returns {Root} Root namespace
+ */
+Root.fromJSON = function fromJSON(json, root) {
+    if (!root)
+        root = new Root();
+    if (json.options)
+        root.setOptions(json.options);
+    return root.addJSON(json.nested);
+};
+
+/**
+ * Resolves the path of an imported file, relative to the importing origin.
+ * This method exists so you can override it with your own logic in case your imports are scattered over multiple directories.
+ * @function
+ * @param {string} origin The file name of the importing file
+ * @param {string} target The file name being imported
+ * @returns {string|null} Resolved path to `target` or `null` to skip the file
+ */
+Root.prototype.resolvePath = util.path.resolve;
+
+// A symbol-like function to safely signal synchronous loading
+/* istanbul ignore next */
+function SYNC() {} // eslint-disable-line no-empty-function
+
+/**
+ * Loads one or multiple .proto or preprocessed .json files into this root namespace and calls the callback.
+ * @param {string|string[]} filename Names of one or multiple files to load
+ * @param {IParseOptions} options Parse options
+ * @param {LoadCallback} callback Callback function
+ * @returns {undefined}
+ */
+Root.prototype.load = function load(filename, options, callback) {
+    if (typeof options === "function") {
+        callback = options;
+        options = undefined;
+    }
+    var self = this;
+    if (!callback)
+        return util.asPromise(load, self, filename, options);
+
+    var sync = callback === SYNC; // undocumented
+
+    // Finishes loading by calling the callback (exactly once)
+    function finish(err, root) {
+        /* istanbul ignore if */
+        if (!callback)
+            return;
+        var cb = callback;
+        callback = null;
+        if (sync)
+            throw err;
+        cb(err, root);
+    }
+
+    // Processes a single file
+    function process(filename, source) {
+        try {
+            if (util.isString(source) && source.charAt(0) === "{")
+                source = JSON.parse(source);
+            if (!util.isString(source))
+                self.setOptions(source.options).addJSON(source.nested);
+            else {
+                parse.filename = filename;
+                var parsed = parse(source, self, options),
+                    resolved,
+                    i = 0;
+                if (parsed.imports)
+                    for (; i < parsed.imports.length; ++i)
+                        if (resolved = self.resolvePath(filename, parsed.imports[i]))
+                            fetch(resolved);
+                if (parsed.weakImports)
+                    for (i = 0; i < parsed.weakImports.length; ++i)
+                        if (resolved = self.resolvePath(filename, parsed.weakImports[i]))
+                            fetch(resolved, true);
+            }
+        } catch (err) {
+            finish(err);
+        }
+        if (!sync && !queued)
+            finish(null, self); // only once anyway
+    }
+
+    // Fetches a single file
+    function fetch(filename, weak) {
+
+        // Strip path if this file references a bundled definition
+        var idx = filename.lastIndexOf("google/protobuf/");
+        if (idx > -1) {
+            var altname = filename.substring(idx);
+            if (altname in common)
+                filename = altname;
+        }
+
+        // Skip if already loaded / attempted
+        if (self.files.indexOf(filename) > -1)
+            return;
+        self.files.push(filename);
+
+        // Shortcut bundled definitions
+        if (filename in common) {
+            if (sync)
+                process(filename, common[filename]);
+            else {
+                ++queued;
+                setTimeout(function() {
+                    --queued;
+                    process(filename, common[filename]);
+                });
+            }
+            return;
+        }
+
+        // Otherwise fetch from disk or network
+        if (sync) {
+            var source;
+            try {
+                source = util.fs.readFileSync(filename).toString("utf8");
+            } catch (err) {
+                if (!weak)
+                    finish(err);
+                return;
+            }
+            process(filename, source);
+        } else {
+            ++queued;
+            util.fetch(filename, function(err, source) {
+                --queued;
+                /* istanbul ignore if */
+                if (!callback)
+                    return; // terminated meanwhile
+                if (err) {
+                    /* istanbul ignore else */
+                    if (!weak)
+                        finish(err);
+                    else if (!queued) // can't be covered reliably
+                        finish(null, self);
+                    return;
+                }
+                process(filename, source);
+            });
+        }
+    }
+    var queued = 0;
+
+    // Assembling the root namespace doesn't require working type
+    // references anymore, so we can load everything in parallel
+    if (util.isString(filename))
+        filename = [ filename ];
+    for (var i = 0, resolved; i < filename.length; ++i)
+        if (resolved = self.resolvePath("", filename[i]))
+            fetch(resolved);
+
+    if (sync)
+        return self;
+    if (!queued)
+        finish(null, self);
+    return undefined;
+};
+// function load(filename:string, options:IParseOptions, callback:LoadCallback):undefined
+
+/**
+ * Loads one or multiple .proto or preprocessed .json files into this root namespace and calls the callback.
+ * @function Root#load
+ * @param {string|string[]} filename Names of one or multiple files to load
+ * @param {LoadCallback} callback Callback function
+ * @returns {undefined}
+ * @variation 2
+ */
+// function load(filename:string, callback:LoadCallback):undefined
+
+/**
+ * Loads one or multiple .proto or preprocessed .json files into this root namespace and returns a promise.
+ * @function Root#load
+ * @param {string|string[]} filename Names of one or multiple files to load
+ * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
+ * @returns {Promise<Root>} Promise
+ * @variation 3
+ */
+// function load(filename:string, [options:IParseOptions]):Promise<Root>
+
+/**
+ * Synchronously loads one or multiple .proto or preprocessed .json files into this root namespace (node only).
+ * @function Root#loadSync
+ * @param {string|string[]} filename Names of one or multiple files to load
+ * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
+ * @returns {Root} Root namespace
+ * @throws {Error} If synchronous fetching is not supported (i.e. in browsers) or if a file's syntax is invalid
+ */
+Root.prototype.loadSync = function loadSync(filename, options) {
+    if (!util.isNode)
+        throw Error("not supported");
+    return this.load(filename, options, SYNC);
+};
+
+/**
+ * @override
+ */
+Root.prototype.resolveAll = function resolveAll() {
+    if (this.deferred.length)
+        throw Error("unresolvable extensions: " + this.deferred.map(function(field) {
+            return "'extend " + field.extend + "' in " + field.parent.fullName;
+        }).join(", "));
+    return Namespace.prototype.resolveAll.call(this);
+};
+
+// only uppercased (and thus conflict-free) children are exposed, see below
+var exposeRe = /^[A-Z]/;
+
+/**
+ * Handles a deferred declaring extension field by creating a sister field to represent it within its extended type.
+ * @param {Root} root Root instance
+ * @param {Field} field Declaring extension field witin the declaring type
+ * @returns {boolean} `true` if successfully added to the extended type, `false` otherwise
+ * @inner
+ * @ignore
+ */
+function tryHandleExtension(root, field) {
+    var extendedType = field.parent.lookup(field.extend);
+    if (extendedType) {
+        var sisterField = new Field(field.fullName, field.id, field.type, field.rule, undefined, field.options);
+        sisterField.declaringField = field;
+        field.extensionField = sisterField;
+        extendedType.add(sisterField);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Called when any object is added to this root or its sub-namespaces.
+ * @param {ReflectionObject} object Object added
+ * @returns {undefined}
+ * @private
+ */
+Root.prototype._handleAdd = function _handleAdd(object) {
+    if (object instanceof Field) {
+
+        if (/* an extension field (implies not part of a oneof) */ object.extend !== undefined && /* not already handled */ !object.extensionField)
+            if (!tryHandleExtension(this, object))
+                this.deferred.push(object);
+
+    } else if (object instanceof Enum) {
+
+        if (exposeRe.test(object.name))
+            object.parent[object.name] = object.values; // expose enum values as property of its parent
+
+    } else if (!(object instanceof OneOf)) /* everything else is a namespace */ {
+
+        if (object instanceof Type) // Try to handle any deferred extensions
+            for (var i = 0; i < this.deferred.length;)
+                if (tryHandleExtension(this, this.deferred[i]))
+                    this.deferred.splice(i, 1);
+                else
+                    ++i;
+        for (var j = 0; j < /* initializes */ object.nestedArray.length; ++j) // recurse into the namespace
+            this._handleAdd(object._nestedArray[j]);
+        if (exposeRe.test(object.name))
+            object.parent[object.name] = object; // expose namespace as property of its parent
+    }
+
+    // The above also adds uppercased (and thus conflict-free) nested types, services and enums as
+    // properties of namespaces just like static code does. This allows using a .d.ts generated for
+    // a static module with reflection-based solutions where the condition is met.
+};
+
+/**
+ * Called when any object is removed from this root or its sub-namespaces.
+ * @param {ReflectionObject} object Object removed
+ * @returns {undefined}
+ * @private
+ */
+Root.prototype._handleRemove = function _handleRemove(object) {
+    if (object instanceof Field) {
+
+        if (/* an extension field */ object.extend !== undefined) {
+            if (/* already handled */ object.extensionField) { // remove its sister field
+                object.extensionField.parent.remove(object.extensionField);
+                object.extensionField = null;
+            } else { // cancel the extension
+                var index = this.deferred.indexOf(object);
+                /* istanbul ignore else */
+                if (index > -1)
+                    this.deferred.splice(index, 1);
+            }
+        }
+
+    } else if (object instanceof Enum) {
+
+        if (exposeRe.test(object.name))
+            delete object.parent[object.name]; // unexpose enum values
+
+    } else if (object instanceof Namespace) {
+
+        for (var i = 0; i < /* initializes */ object.nestedArray.length; ++i) // recurse into the namespace
+            this._handleRemove(object._nestedArray[i]);
+
+        if (exposeRe.test(object.name))
+            delete object.parent[object.name]; // unexpose namespaces
+
+    }
+};
+
+// Sets up cyclic dependencies (called in index-light)
+Root._configure = function(Type_, parse_, common_) {
+    Type   = Type_;
+    parse  = parse_;
+    common = common_;
+};
+
+
+/***/ }),
 /* 24 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var old;
+if (typeof Promise !== "undefined") old = Promise;
+function noConflict() {
+    try { if (Promise === bluebird) Promise = old; }
+    catch (e) {}
+    return bluebird;
+}
+var bluebird = __webpack_require__(42)();
+bluebird.noConflict = noConflict;
+module.exports = bluebird;
+
+
+/***/ }),
+/* 25 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = function(NEXT_FILTER) {
+var util = __webpack_require__(0);
+var getKeys = __webpack_require__(6).keys;
+var tryCatch = util.tryCatch;
+var errorObj = util.errorObj;
+
+function catchFilter(instances, cb, promise) {
+    return function(e) {
+        var boundTo = promise._boundValue();
+        predicateLoop: for (var i = 0; i < instances.length; ++i) {
+            var item = instances[i];
+
+            if (item === Error ||
+                (item != null && item.prototype instanceof Error)) {
+                if (e instanceof item) {
+                    return tryCatch(cb).call(boundTo, e);
+                }
+            } else if (typeof item === "function") {
+                var matchesPredicate = tryCatch(item).call(boundTo, e);
+                if (matchesPredicate === errorObj) {
+                    return matchesPredicate;
+                } else if (matchesPredicate) {
+                    return tryCatch(cb).call(boundTo, e);
+                }
+            } else if (util.isObject(e)) {
+                var keys = getKeys(item);
+                for (var j = 0; j < keys.length; ++j) {
+                    var key = keys[j];
+                    if (item[key] != e[key]) {
+                        continue predicateLoop;
+                    }
+                }
+                return tryCatch(cb).call(boundTo, e);
+            }
+        }
+        return NEXT_FILTER;
+    };
+}
+
+return catchFilter;
+};
+
+
+/***/ }),
+/* 26 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var util = __webpack_require__(0);
+var maybeWrapAsError = util.maybeWrapAsError;
+var errors = __webpack_require__(5);
+var OperationalError = errors.OperationalError;
+var es5 = __webpack_require__(6);
+
+function isUntypedError(obj) {
+    return obj instanceof Error &&
+        es5.getPrototypeOf(obj) === Error.prototype;
+}
+
+var rErrorKey = /^(?:name|message|stack|cause)$/;
+function wrapAsOperationalError(obj) {
+    var ret;
+    if (isUntypedError(obj)) {
+        ret = new OperationalError(obj);
+        ret.name = obj.name;
+        ret.message = obj.message;
+        ret.stack = obj.stack;
+        var keys = es5.keys(obj);
+        for (var i = 0; i < keys.length; ++i) {
+            var key = keys[i];
+            if (!rErrorKey.test(key)) {
+                ret[key] = obj[key];
+            }
+        }
+        return ret;
+    }
+    util.markAsOriginatingFromRejection(obj);
+    return obj;
+}
+
+function nodebackForPromise(promise, multiArgs) {
+    return function(err, value) {
+        if (promise === null) return;
+        if (err) {
+            var wrapped = wrapAsOperationalError(maybeWrapAsError(err));
+            promise._attachExtraTrace(wrapped);
+            promise._reject(wrapped);
+        } else if (!multiArgs) {
+            promise._fulfill(value);
+        } else {
+            var $_len = arguments.length;var args = new Array(Math.max($_len - 1, 0)); for(var $_i = 1; $_i < $_len; ++$_i) {args[$_i - 1] = arguments[$_i];};
+            promise._fulfill(args);
+        }
+        promise = null;
+    };
+}
+
+module.exports = nodebackForPromise;
+
+
+/***/ }),
+/* 27 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = asPromise;
+
+/**
+ * Callback as used by {@link util.asPromise}.
+ * @typedef asPromiseCallback
+ * @type {function}
+ * @param {Error|null} error Error, if any
+ * @param {...*} params Additional arguments
+ * @returns {undefined}
+ */
+
+/**
+ * Returns a promise from a node-style callback function.
+ * @memberof util
+ * @param {asPromiseCallback} fn Function to call
+ * @param {*} ctx Function context
+ * @param {...*} params Function arguments
+ * @returns {Promise<*>} Promisified function
+ */
+function asPromise(fn, ctx/*, varargs */) {
+    var params  = new Array(arguments.length - 1),
+        offset  = 0,
+        index   = 2,
+        pending = true;
+    while (index < arguments.length)
+        params[offset++] = arguments[index++];
+    return new Promise(function executor(resolve, reject) {
+        params[offset] = function callback(err/*, varargs */) {
+            if (pending) {
+                pending = false;
+                if (err)
+                    reject(err);
+                else {
+                    var params = new Array(arguments.length - 1),
+                        offset = 0;
+                    while (offset < params.length)
+                        params[offset++] = arguments[offset];
+                    resolve.apply(null, params);
+                }
+            }
+        };
+        try {
+            fn.apply(ctx || null, params);
+        } catch (err) {
+            if (pending) {
+                pending = false;
+                reject(err);
+            }
+        }
+    });
+}
+
+
+/***/ }),
+/* 28 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = inquire;
+
+/**
+ * Requires a module only if available.
+ * @memberof util
+ * @param {string} moduleName Module to require
+ * @returns {?Object} Required module if available and not empty, otherwise `null`
+ */
+function inquire(moduleName) {
+    try {
+        var mod = eval("quire".replace(/^/,"re"))(moduleName); // eslint-disable-line no-eval
+        if (mod && (mod.length || Object.keys(mod).length))
+            return mod;
+    } catch (e) {} // eslint-disable-line no-empty
+    return null;
+}
+
+
+/***/ }),
+/* 29 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+/**
+ * Streaming RPC helpers.
+ * @namespace
+ */
+var rpc = exports;
+
+/**
+ * RPC implementation passed to {@link Service#create} performing a service request on network level, i.e. by utilizing http requests or websockets.
+ * @typedef RPCImpl
+ * @type {function}
+ * @param {Method|rpc.ServiceMethod<Message<{}>,Message<{}>>} method Reflected or static method being called
+ * @param {Uint8Array} requestData Request data
+ * @param {RPCImplCallback} callback Callback function
+ * @returns {undefined}
+ * @example
+ * function rpcImpl(method, requestData, callback) {
+ *     if (protobuf.util.lcFirst(method.name) !== "myMethod") // compatible with static code
+ *         throw Error("no such method");
+ *     asynchronouslyObtainAResponse(requestData, function(err, responseData) {
+ *         callback(err, responseData);
+ *     });
+ * }
+ */
+
+/**
+ * Node-style callback as used by {@link RPCImpl}.
+ * @typedef RPCImplCallback
+ * @type {function}
+ * @param {Error|null} error Error, if any, otherwise `null`
+ * @param {Uint8Array|null} [response] Response data or `null` to signal end of stream, if there hasn't been an error
+ * @returns {undefined}
+ */
+
+rpc.Service = __webpack_require__(83);
+
+
+/***/ }),
+/* 30 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = {};
+
+/**
+ * Named roots.
+ * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
+ * Can also be used manually to make roots available accross modules.
+ * @name roots
+ * @type {Object.<string,Root>}
+ * @example
+ * // pbjs -r myroot -o compiled.js ...
+ *
+ * // in another module:
+ * require("./compiled.js");
+ *
+ * // in any subsequent module:
+ * var root = protobuf.roots["myroot"];
+ */
+
+
+/***/ }),
+/* 31 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = encoder;
+
+var Enum     = __webpack_require__(3),
+    types    = __webpack_require__(9),
+    util     = __webpack_require__(2);
+
+/**
+ * Generates a partial message type encoder.
+ * @param {Codegen} gen Codegen instance
+ * @param {Field} field Reflected field
+ * @param {number} fieldIndex Field index
+ * @param {string} ref Variable reference
+ * @returns {Codegen} Codegen instance
+ * @ignore
+ */
+function genTypePartial(gen, field, fieldIndex, ref) {
+    return field.resolvedType.group
+        ? gen("types[%i].encode(%s,w.uint32(%i)).uint32(%i)", fieldIndex, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0)
+        : gen("types[%i].encode(%s,w.uint32(%i).fork()).ldelim()", fieldIndex, ref, (field.id << 3 | 2) >>> 0);
+}
+
+/**
+ * Generates an encoder specific to the specified message type.
+ * @param {Type} mtype Message type
+ * @returns {Codegen} Codegen instance
+ */
+function encoder(mtype) {
+    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
+    var gen = util.codegen(["m", "w"], mtype.name + "$encode")
+    ("if(!w)")
+        ("w=Writer.create()");
+
+    var i, ref;
+
+    // "when a message is serialized its known fields should be written sequentially by field number"
+    var fields = /* initializes */ mtype.fieldsArray.slice().sort(util.compareFieldsById);
+
+    for (var i = 0; i < fields.length; ++i) {
+        var field    = fields[i].resolve(),
+            index    = mtype._fieldsArray.indexOf(field),
+            type     = field.resolvedType instanceof Enum ? "int32" : field.type,
+            wireType = types.basic[type];
+            ref      = "m" + util.safeProp(field.name);
+
+        // Map fields
+        if (field.map) {
+            gen
+    ("if(%s!=null&&m.hasOwnProperty(%j)){", ref, field.name) // !== undefined && !== null
+        ("for(var ks=Object.keys(%s),i=0;i<ks.length;++i){", ref)
+            ("w.uint32(%i).fork().uint32(%i).%s(ks[i])", (field.id << 3 | 2) >>> 0, 8 | types.mapKey[field.keyType], field.keyType);
+            if (wireType === undefined) gen
+            ("types[%i].encode(%s[ks[i]],w.uint32(18).fork()).ldelim().ldelim()", index, ref); // can't be groups
+            else gen
+            (".uint32(%i).%s(%s[ks[i]]).ldelim()", 16 | wireType, type, ref);
+            gen
+        ("}")
+    ("}");
+
+            // Repeated fields
+        } else if (field.repeated) { gen
+    ("if(%s!=null&&%s.length){", ref, ref); // !== undefined && !== null
+
+            // Packed repeated
+            if (field.packed && types.packed[type] !== undefined) { gen
+
+        ("w.uint32(%i).fork()", (field.id << 3 | 2) >>> 0)
+        ("for(var i=0;i<%s.length;++i)", ref)
+            ("w.%s(%s[i])", type, ref)
+        ("w.ldelim()");
+
+            // Non-packed
+            } else { gen
+
+        ("for(var i=0;i<%s.length;++i)", ref);
+                if (wireType === undefined)
+            genTypePartial(gen, field, index, ref + "[i]");
+                else gen
+            ("w.uint32(%i).%s(%s[i])", (field.id << 3 | wireType) >>> 0, type, ref);
+
+            } gen
+    ("}");
+
+        // Non-repeated
+        } else {
+            if (field.optional) gen
+    ("if(%s!=null&&m.hasOwnProperty(%j))", ref, field.name); // !== undefined && !== null
+
+            if (wireType === undefined)
+        genTypePartial(gen, field, index, ref);
+            else gen
+        ("w.uint32(%i).%s(%s)", (field.id << 3 | wireType) >>> 0, type, ref);
+
+        }
+    }
+
+    return gen
+    ("return w");
+    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
+}
+
+/***/ }),
+/* 32 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = decoder;
+
+var Enum    = __webpack_require__(3),
+    types   = __webpack_require__(9),
+    util    = __webpack_require__(2);
+
+function missing(field) {
+    return "missing required '" + field.name + "'";
+}
+
+/**
+ * Generates a decoder specific to the specified message type.
+ * @param {Type} mtype Message type
+ * @returns {Codegen} Codegen instance
+ */
+function decoder(mtype) {
+    /* eslint-disable no-unexpected-multiline */
+    var gen = util.codegen(["r", "l"], mtype.name + "$decode")
+    ("if(!(r instanceof Reader))")
+        ("r=Reader.create(r)")
+    ("var c=l===undefined?r.len:r.pos+l,m=new this.ctor" + (mtype.fieldsArray.filter(function(field) { return field.map; }).length ? ",k" : ""))
+    ("while(r.pos<c){")
+        ("var t=r.uint32()");
+    if (mtype.group) gen
+        ("if((t&7)===4)")
+            ("break");
+    gen
+        ("switch(t>>>3){");
+
+    var i = 0;
+    for (; i < /* initializes */ mtype.fieldsArray.length; ++i) {
+        var field = mtype._fieldsArray[i].resolve(),
+            type  = field.resolvedType instanceof Enum ? "int32" : field.type,
+            ref   = "m" + util.safeProp(field.name); gen
+            ("case %i:", field.id);
+
+        // Map fields
+        if (field.map) { gen
+                ("r.skip().pos++") // assumes id 1 + key wireType
+                ("if(%s===util.emptyObject)", ref)
+                    ("%s={}", ref)
+                ("k=r.%s()", field.keyType)
+                ("r.pos++"); // assumes id 2 + value wireType
+            if (types.long[field.keyType] !== undefined) {
+                if (types.basic[type] === undefined) gen
+                ("%s[typeof k===\"object\"?util.longToHash(k):k]=types[%i].decode(r,r.uint32())", ref, i); // can't be groups
+                else gen
+                ("%s[typeof k===\"object\"?util.longToHash(k):k]=r.%s()", ref, type);
+            } else {
+                if (types.basic[type] === undefined) gen
+                ("%s[k]=types[%i].decode(r,r.uint32())", ref, i); // can't be groups
+                else gen
+                ("%s[k]=r.%s()", ref, type);
+            }
+
+        // Repeated fields
+        } else if (field.repeated) { gen
+
+                ("if(!(%s&&%s.length))", ref, ref)
+                    ("%s=[]", ref);
+
+            // Packable (always check for forward and backward compatiblity)
+            if (types.packed[type] !== undefined) gen
+                ("if((t&7)===2){")
+                    ("var c2=r.uint32()+r.pos")
+                    ("while(r.pos<c2)")
+                        ("%s.push(r.%s())", ref, type)
+                ("}else");
+
+            // Non-packed
+            if (types.basic[type] === undefined) gen(field.resolvedType.group
+                    ? "%s.push(types[%i].decode(r))"
+                    : "%s.push(types[%i].decode(r,r.uint32()))", ref, i);
+            else gen
+                    ("%s.push(r.%s())", ref, type);
+
+        // Non-repeated
+        } else if (types.basic[type] === undefined) gen(field.resolvedType.group
+                ? "%s=types[%i].decode(r)"
+                : "%s=types[%i].decode(r,r.uint32())", ref, i);
+        else gen
+                ("%s=r.%s()", ref, type);
+        gen
+                ("break");
+    // Unknown fields
+    } gen
+            ("default:")
+                ("r.skipType(t&7)")
+                ("break")
+
+        ("}")
+    ("}");
+
+    // Field presence
+    for (i = 0; i < mtype._fieldsArray.length; ++i) {
+        var rfield = mtype._fieldsArray[i];
+        if (rfield.required) gen
+    ("if(!m.hasOwnProperty(%j))", rfield.name)
+        ("throw util.ProtocolError(%j,{instance:m})", missing(rfield));
+    }
+
+    return gen
+    ("return m");
+    /* eslint-enable no-unexpected-multiline */
+}
+
+
+/***/ }),
+/* 33 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = verifier;
+
+var Enum      = __webpack_require__(3),
+    util      = __webpack_require__(2);
+
+function invalid(field, expected) {
+    return field.name + ": " + expected + (field.repeated && expected !== "array" ? "[]" : field.map && expected !== "object" ? "{k:"+field.keyType+"}" : "") + " expected";
+}
+
+/**
+ * Generates a partial value verifier.
+ * @param {Codegen} gen Codegen instance
+ * @param {Field} field Reflected field
+ * @param {number} fieldIndex Field index
+ * @param {string} ref Variable reference
+ * @returns {Codegen} Codegen instance
+ * @ignore
+ */
+function genVerifyValue(gen, field, fieldIndex, ref) {
+    /* eslint-disable no-unexpected-multiline */
+    if (field.resolvedType) {
+        if (field.resolvedType instanceof Enum) { gen
+            ("switch(%s){", ref)
+                ("default:")
+                    ("return%j", invalid(field, "enum value"));
+            for (var keys = Object.keys(field.resolvedType.values), j = 0; j < keys.length; ++j) gen
+                ("case %i:", field.resolvedType.values[keys[j]]);
+            gen
+                    ("break")
+            ("}");
+        } else {
+            gen
+            ("{")
+                ("var e=types[%i].verify(%s);", fieldIndex, ref)
+                ("if(e)")
+                    ("return%j+e", field.name + ".")
+            ("}");
+        }
+    } else {
+        switch (field.type) {
+            case "int32":
+            case "uint32":
+            case "sint32":
+            case "fixed32":
+            case "sfixed32": gen
+                ("if(!util.isInteger(%s))", ref)
+                    ("return%j", invalid(field, "integer"));
+                break;
+            case "int64":
+            case "uint64":
+            case "sint64":
+            case "fixed64":
+            case "sfixed64": gen
+                ("if(!util.isInteger(%s)&&!(%s&&util.isInteger(%s.low)&&util.isInteger(%s.high)))", ref, ref, ref, ref)
+                    ("return%j", invalid(field, "integer|Long"));
+                break;
+            case "float":
+            case "double": gen
+                ("if(typeof %s!==\"number\")", ref)
+                    ("return%j", invalid(field, "number"));
+                break;
+            case "bool": gen
+                ("if(typeof %s!==\"boolean\")", ref)
+                    ("return%j", invalid(field, "boolean"));
+                break;
+            case "string": gen
+                ("if(!util.isString(%s))", ref)
+                    ("return%j", invalid(field, "string"));
+                break;
+            case "bytes": gen
+                ("if(!(%s&&typeof %s.length===\"number\"||util.isString(%s)))", ref, ref, ref)
+                    ("return%j", invalid(field, "buffer"));
+                break;
+        }
+    }
+    return gen;
+    /* eslint-enable no-unexpected-multiline */
+}
+
+/**
+ * Generates a partial key verifier.
+ * @param {Codegen} gen Codegen instance
+ * @param {Field} field Reflected field
+ * @param {string} ref Variable reference
+ * @returns {Codegen} Codegen instance
+ * @ignore
+ */
+function genVerifyKey(gen, field, ref) {
+    /* eslint-disable no-unexpected-multiline */
+    switch (field.keyType) {
+        case "int32":
+        case "uint32":
+        case "sint32":
+        case "fixed32":
+        case "sfixed32": gen
+            ("if(!util.key32Re.test(%s))", ref)
+                ("return%j", invalid(field, "integer key"));
+            break;
+        case "int64":
+        case "uint64":
+        case "sint64":
+        case "fixed64":
+        case "sfixed64": gen
+            ("if(!util.key64Re.test(%s))", ref) // see comment above: x is ok, d is not
+                ("return%j", invalid(field, "integer|Long key"));
+            break;
+        case "bool": gen
+            ("if(!util.key2Re.test(%s))", ref)
+                ("return%j", invalid(field, "boolean key"));
+            break;
+    }
+    return gen;
+    /* eslint-enable no-unexpected-multiline */
+}
+
+/**
+ * Generates a verifier specific to the specified message type.
+ * @param {Type} mtype Message type
+ * @returns {Codegen} Codegen instance
+ */
+function verifier(mtype) {
+    /* eslint-disable no-unexpected-multiline */
+
+    var gen = util.codegen(["m"], mtype.name + "$verify")
+    ("if(typeof m!==\"object\"||m===null)")
+        ("return%j", "object expected");
+    var oneofs = mtype.oneofsArray,
+        seenFirstField = {};
+    if (oneofs.length) gen
+    ("var p={}");
+
+    for (var i = 0; i < /* initializes */ mtype.fieldsArray.length; ++i) {
+        var field = mtype._fieldsArray[i].resolve(),
+            ref   = "m" + util.safeProp(field.name);
+
+        if (field.optional) gen
+        ("if(%s!=null&&m.hasOwnProperty(%j)){", ref, field.name); // !== undefined && !== null
+
+        // map fields
+        if (field.map) { gen
+            ("if(!util.isObject(%s))", ref)
+                ("return%j", invalid(field, "object"))
+            ("var k=Object.keys(%s)", ref)
+            ("for(var i=0;i<k.length;++i){");
+                genVerifyKey(gen, field, "k[i]");
+                genVerifyValue(gen, field, i, ref + "[k[i]]")
+            ("}");
+
+        // repeated fields
+        } else if (field.repeated) { gen
+            ("if(!Array.isArray(%s))", ref)
+                ("return%j", invalid(field, "array"))
+            ("for(var i=0;i<%s.length;++i){", ref);
+                genVerifyValue(gen, field, i, ref + "[i]")
+            ("}");
+
+        // required or present fields
+        } else {
+            if (field.partOf) {
+                var oneofProp = util.safeProp(field.partOf.name);
+                if (seenFirstField[field.partOf.name] === 1) gen
+            ("if(p%s===1)", oneofProp)
+                ("return%j", field.partOf.name + ": multiple values");
+                seenFirstField[field.partOf.name] = 1;
+                gen
+            ("p%s=1", oneofProp);
+            }
+            genVerifyValue(gen, field, i, ref);
+        }
+        if (field.optional) gen
+        ("}");
+    }
+    return gen
+    ("return null");
+    /* eslint-enable no-unexpected-multiline */
+}
+
+/***/ }),
+/* 34 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+/**
+ * Runtime message from/to plain object converters.
+ * @namespace
+ */
+var converter = exports;
+
+var Enum = __webpack_require__(3),
+    util = __webpack_require__(2);
+
+/**
+ * Generates a partial value fromObject conveter.
+ * @param {Codegen} gen Codegen instance
+ * @param {Field} field Reflected field
+ * @param {number} fieldIndex Field index
+ * @param {string} prop Property reference
+ * @returns {Codegen} Codegen instance
+ * @ignore
+ */
+function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
+    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
+    if (field.resolvedType) {
+        if (field.resolvedType instanceof Enum) { gen
+            ("switch(d%s){", prop);
+            for (var values = field.resolvedType.values, keys = Object.keys(values), i = 0; i < keys.length; ++i) {
+                if (field.repeated && values[keys[i]] === field.typeDefault) gen
+                ("default:");
+                gen
+                ("case%j:", keys[i])
+                ("case %i:", values[keys[i]])
+                    ("m%s=%j", prop, values[keys[i]])
+                    ("break");
+            } gen
+            ("}");
+        } else gen
+            ("if(typeof d%s!==\"object\")", prop)
+                ("throw TypeError(%j)", field.fullName + ": object expected")
+            ("m%s=types[%i].fromObject(d%s)", prop, fieldIndex, prop);
+    } else {
+        var isUnsigned = false;
+        switch (field.type) {
+            case "double":
+            case "float": gen
+                ("m%s=Number(d%s)", prop, prop); // also catches "NaN", "Infinity"
+                break;
+            case "uint32":
+            case "fixed32": gen
+                ("m%s=d%s>>>0", prop, prop);
+                break;
+            case "int32":
+            case "sint32":
+            case "sfixed32": gen
+                ("m%s=d%s|0", prop, prop);
+                break;
+            case "uint64":
+                isUnsigned = true;
+                // eslint-disable-line no-fallthrough
+            case "int64":
+            case "sint64":
+            case "fixed64":
+            case "sfixed64": gen
+                ("if(util.Long)")
+                    ("(m%s=util.Long.fromValue(d%s)).unsigned=%j", prop, prop, isUnsigned)
+                ("else if(typeof d%s===\"string\")", prop)
+                    ("m%s=parseInt(d%s,10)", prop, prop)
+                ("else if(typeof d%s===\"number\")", prop)
+                    ("m%s=d%s", prop, prop)
+                ("else if(typeof d%s===\"object\")", prop)
+                    ("m%s=new util.LongBits(d%s.low>>>0,d%s.high>>>0).toNumber(%s)", prop, prop, prop, isUnsigned ? "true" : "");
+                break;
+            case "bytes": gen
+                ("if(typeof d%s===\"string\")", prop)
+                    ("util.base64.decode(d%s,m%s=util.newBuffer(util.base64.length(d%s)),0)", prop, prop, prop)
+                ("else if(d%s.length)", prop)
+                    ("m%s=d%s", prop, prop);
+                break;
+            case "string": gen
+                ("m%s=String(d%s)", prop, prop);
+                break;
+            case "bool": gen
+                ("m%s=Boolean(d%s)", prop, prop);
+                break;
+            /* default: gen
+                ("m%s=d%s", prop, prop);
+                break; */
+        }
+    }
+    return gen;
+    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
+}
+
+/**
+ * Generates a plain object to runtime message converter specific to the specified message type.
+ * @param {Type} mtype Message type
+ * @returns {Codegen} Codegen instance
+ */
+converter.fromObject = function fromObject(mtype) {
+    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
+    var fields = mtype.fieldsArray;
+    var gen = util.codegen(["d"], mtype.name + "$fromObject")
+    ("if(d instanceof this.ctor)")
+        ("return d");
+    if (!fields.length) return gen
+    ("return new this.ctor");
+    gen
+    ("var m=new this.ctor");
+    for (var i = 0; i < fields.length; ++i) {
+        var field  = fields[i].resolve(),
+            prop   = util.safeProp(field.name);
+
+        // Map fields
+        if (field.map) { gen
+    ("if(d%s){", prop)
+        ("if(typeof d%s!==\"object\")", prop)
+            ("throw TypeError(%j)", field.fullName + ": object expected")
+        ("m%s={}", prop)
+        ("for(var ks=Object.keys(d%s),i=0;i<ks.length;++i){", prop);
+            genValuePartial_fromObject(gen, field, /* not sorted */ i, prop + "[ks[i]]")
+        ("}")
+    ("}");
+
+        // Repeated fields
+        } else if (field.repeated) { gen
+    ("if(d%s){", prop)
+        ("if(!Array.isArray(d%s))", prop)
+            ("throw TypeError(%j)", field.fullName + ": array expected")
+        ("m%s=[]", prop)
+        ("for(var i=0;i<d%s.length;++i){", prop);
+            genValuePartial_fromObject(gen, field, /* not sorted */ i, prop + "[i]")
+        ("}")
+    ("}");
+
+        // Non-repeated fields
+        } else {
+            if (!(field.resolvedType instanceof Enum)) gen // no need to test for null/undefined if an enum (uses switch)
+    ("if(d%s!=null){", prop); // !== undefined && !== null
+        genValuePartial_fromObject(gen, field, /* not sorted */ i, prop);
+            if (!(field.resolvedType instanceof Enum)) gen
+    ("}");
+        }
+    } return gen
+    ("return m");
+    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
+};
+
+/**
+ * Generates a partial value toObject converter.
+ * @param {Codegen} gen Codegen instance
+ * @param {Field} field Reflected field
+ * @param {number} fieldIndex Field index
+ * @param {string} prop Property reference
+ * @returns {Codegen} Codegen instance
+ * @ignore
+ */
+function genValuePartial_toObject(gen, field, fieldIndex, prop) {
+    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
+    if (field.resolvedType) {
+        if (field.resolvedType instanceof Enum) gen
+            ("d%s=o.enums===String?types[%i].values[m%s]:m%s", prop, fieldIndex, prop, prop);
+        else gen
+            ("d%s=types[%i].toObject(m%s,o)", prop, fieldIndex, prop);
+    } else {
+        var isUnsigned = false;
+        switch (field.type) {
+            case "double":
+            case "float": gen
+            ("d%s=o.json&&!isFinite(m%s)?String(m%s):m%s", prop, prop, prop, prop);
+                break;
+            case "uint64":
+                isUnsigned = true;
+                // eslint-disable-line no-fallthrough
+            case "int64":
+            case "sint64":
+            case "fixed64":
+            case "sfixed64": gen
+            ("if(typeof m%s===\"number\")", prop)
+                ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
+            ("else") // Long-like
+                ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
+                break;
+            case "bytes": gen
+            ("d%s=o.bytes===String?util.base64.encode(m%s,0,m%s.length):o.bytes===Array?Array.prototype.slice.call(m%s):m%s", prop, prop, prop, prop, prop);
+                break;
+            default: gen
+            ("d%s=m%s", prop, prop);
+                break;
+        }
+    }
+    return gen;
+    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
+}
+
+/**
+ * Generates a runtime message to plain object converter specific to the specified message type.
+ * @param {Type} mtype Message type
+ * @returns {Codegen} Codegen instance
+ */
+converter.toObject = function toObject(mtype) {
+    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
+    var fields = mtype.fieldsArray.slice().sort(util.compareFieldsById);
+    if (!fields.length)
+        return util.codegen()("return {}");
+    var gen = util.codegen(["m", "o"], mtype.name + "$toObject")
+    ("if(!o)")
+        ("o={}")
+    ("var d={}");
+
+    var repeatedFields = [],
+        mapFields = [],
+        normalFields = [],
+        i = 0;
+    for (; i < fields.length; ++i)
+        if (!fields[i].partOf)
+            ( fields[i].resolve().repeated ? repeatedFields
+            : fields[i].map ? mapFields
+            : normalFields).push(fields[i]);
+
+    if (repeatedFields.length) { gen
+    ("if(o.arrays||o.defaults){");
+        for (i = 0; i < repeatedFields.length; ++i) gen
+        ("d%s=[]", util.safeProp(repeatedFields[i].name));
+        gen
+    ("}");
+    }
+
+    if (mapFields.length) { gen
+    ("if(o.objects||o.defaults){");
+        for (i = 0; i < mapFields.length; ++i) gen
+        ("d%s={}", util.safeProp(mapFields[i].name));
+        gen
+    ("}");
+    }
+
+    if (normalFields.length) { gen
+    ("if(o.defaults){");
+        for (i = 0; i < normalFields.length; ++i) {
+            var field = normalFields[i],
+                prop  = util.safeProp(field.name);
+            if (field.resolvedType instanceof Enum) gen
+        ("d%s=o.enums===String?%j:%j", prop, field.resolvedType.valuesById[field.typeDefault], field.typeDefault);
+            else if (field.long) gen
+        ("if(util.Long){")
+            ("var n=new util.Long(%i,%i,%j)", field.typeDefault.low, field.typeDefault.high, field.typeDefault.unsigned)
+            ("d%s=o.longs===String?n.toString():o.longs===Number?n.toNumber():n", prop)
+        ("}else")
+            ("d%s=o.longs===String?%j:%i", prop, field.typeDefault.toString(), field.typeDefault.toNumber());
+            else if (field.bytes) {
+                var arrayDefault = "[" + Array.prototype.slice.call(field.typeDefault).join(",") + "]";
+                gen
+        ("if(o.bytes===String)d%s=%j", prop, String.fromCharCode.apply(String, field.typeDefault))
+        ("else{")
+            ("d%s=%s", prop, arrayDefault)
+            ("if(o.bytes!==Array)d%s=util.newBuffer(d%s)", prop, prop)
+        ("}");
+            } else gen
+        ("d%s=%j", prop, field.typeDefault); // also messages (=null)
+        } gen
+    ("}");
+    }
+    var hasKs2 = false;
+    for (i = 0; i < fields.length; ++i) {
+        var field = fields[i],
+            index = mtype._fieldsArray.indexOf(field),
+            prop  = util.safeProp(field.name);
+        if (field.map) {
+            if (!hasKs2) { hasKs2 = true; gen
+    ("var ks2");
+            } gen
+    ("if(m%s&&(ks2=Object.keys(m%s)).length){", prop, prop)
+        ("d%s={}", prop)
+        ("for(var j=0;j<ks2.length;++j){");
+            genValuePartial_toObject(gen, field, /* sorted */ index, prop + "[ks2[j]]")
+        ("}");
+        } else if (field.repeated) { gen
+    ("if(m%s&&m%s.length){", prop, prop)
+        ("d%s=[]", prop)
+        ("for(var j=0;j<m%s.length;++j){", prop);
+            genValuePartial_toObject(gen, field, /* sorted */ index, prop + "[j]")
+        ("}");
+        } else { gen
+    ("if(m%s!=null&&m.hasOwnProperty(%j)){", prop, field.name); // !== undefined && !== null
+        genValuePartial_toObject(gen, field, /* sorted */ index, prop);
+        if (field.partOf) gen
+        ("if(o.oneofs)")
+            ("d%s=%j", util.safeProp(field.partOf.name), field.name);
+        }
+        gen
+    ("}");
+    }
+    return gen
+    ("return d");
+    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
+};
+
+
+/***/ }),
+/* 35 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+/**
+ * Wrappers for common types.
+ * @type {Object.<string,IWrapper>}
+ * @const
+ */
+var wrappers = exports;
+
+var Message = __webpack_require__(22);
+
+/**
+ * From object converter part of an {@link IWrapper}.
+ * @typedef WrapperFromObjectConverter
+ * @type {function}
+ * @param {Object.<string,*>} object Plain object
+ * @returns {Message<{}>} Message instance
+ * @this Type
+ */
+
+/**
+ * To object converter part of an {@link IWrapper}.
+ * @typedef WrapperToObjectConverter
+ * @type {function}
+ * @param {Message<{}>} message Message instance
+ * @param {IConversionOptions} [options] Conversion options
+ * @returns {Object.<string,*>} Plain object
+ * @this Type
+ */
+
+/**
+ * Common type wrapper part of {@link wrappers}.
+ * @interface IWrapper
+ * @property {WrapperFromObjectConverter} [fromObject] From object converter
+ * @property {WrapperToObjectConverter} [toObject] To object converter
+ */
+
+// Custom wrapper for Any
+wrappers[".google.protobuf.Any"] = {
+
+    fromObject: function(object) {
+
+        // unwrap value type if mapped
+        if (object && object["@type"]) {
+            var type = this.lookup(object["@type"]);
+            /* istanbul ignore else */
+            if (type) {
+                // type_url does not accept leading "."
+                var type_url = object["@type"].charAt(0) === "." ?
+                    object["@type"].substr(1) : object["@type"];
+                // type_url prefix is optional, but path seperator is required
+                return this.create({
+                    type_url: "/" + type_url,
+                    value: type.encode(type.fromObject(object)).finish()
+                });
+            }
+        }
+
+        return this.fromObject(object);
+    },
+
+    toObject: function(message, options) {
+
+        // decode value if requested and unmapped
+        if (options && options.json && message.type_url && message.value) {
+            // Only use fully qualified type name after the last '/'
+            var name = message.type_url.substring(message.type_url.lastIndexOf("/") + 1);
+            var type = this.lookup(name);
+            /* istanbul ignore else */
+            if (type)
+                message = type.decode(message.value);
+        }
+
+        // wrap value if unmapped
+        if (!(message instanceof this.ctor) && message instanceof Message) {
+            var object = message.$type.toObject(message, options);
+            object["@type"] = message.$type.fullName;
+            return object;
+        }
+
+        return this.toObject(message, options);
+    }
+};
+
+
+/***/ }),
+/* 36 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = tokenize;
+
+var delimRe        = /[\s{}=;:[\],'"()<>]/g,
+    stringDoubleRe = /(?:"([^"\\]*(?:\\.[^"\\]*)*)")/g,
+    stringSingleRe = /(?:'([^'\\]*(?:\\.[^'\\]*)*)')/g;
+
+var setCommentRe = /^ *[*/]+ */,
+    setCommentAltRe = /^\s*\*?\/*/,
+    setCommentSplitRe = /\n/g,
+    whitespaceRe = /\s/,
+    unescapeRe = /\\(.?)/g;
+
+var unescapeMap = {
+    "0": "\0",
+    "r": "\r",
+    "n": "\n",
+    "t": "\t"
+};
+
+/**
+ * Unescapes a string.
+ * @param {string} str String to unescape
+ * @returns {string} Unescaped string
+ * @property {Object.<string,string>} map Special characters map
+ * @memberof tokenize
+ */
+function unescape(str) {
+    return str.replace(unescapeRe, function($0, $1) {
+        switch ($1) {
+            case "\\":
+            case "":
+                return $1;
+            default:
+                return unescapeMap[$1] || "";
+        }
+    });
+}
+
+tokenize.unescape = unescape;
+
+/**
+ * Gets the next token and advances.
+ * @typedef TokenizerHandleNext
+ * @type {function}
+ * @returns {string|null} Next token or `null` on eof
+ */
+
+/**
+ * Peeks for the next token.
+ * @typedef TokenizerHandlePeek
+ * @type {function}
+ * @returns {string|null} Next token or `null` on eof
+ */
+
+/**
+ * Pushes a token back to the stack.
+ * @typedef TokenizerHandlePush
+ * @type {function}
+ * @param {string} token Token
+ * @returns {undefined}
+ */
+
+/**
+ * Skips the next token.
+ * @typedef TokenizerHandleSkip
+ * @type {function}
+ * @param {string} expected Expected token
+ * @param {boolean} [optional=false] If optional
+ * @returns {boolean} Whether the token matched
+ * @throws {Error} If the token didn't match and is not optional
+ */
+
+/**
+ * Gets the comment on the previous line or, alternatively, the line comment on the specified line.
+ * @typedef TokenizerHandleCmnt
+ * @type {function}
+ * @param {number} [line] Line number
+ * @returns {string|null} Comment text or `null` if none
+ */
+
+/**
+ * Handle object returned from {@link tokenize}.
+ * @interface ITokenizerHandle
+ * @property {TokenizerHandleNext} next Gets the next token and advances (`null` on eof)
+ * @property {TokenizerHandlePeek} peek Peeks for the next token (`null` on eof)
+ * @property {TokenizerHandlePush} push Pushes a token back to the stack
+ * @property {TokenizerHandleSkip} skip Skips a token, returns its presence and advances or, if non-optional and not present, throws
+ * @property {TokenizerHandleCmnt} cmnt Gets the comment on the previous line or the line comment on the specified line, if any
+ * @property {number} line Current line number
+ */
+
+/**
+ * Tokenizes the given .proto source and returns an object with useful utility functions.
+ * @param {string} source Source contents
+ * @param {boolean} alternateCommentMode Whether we should activate alternate comment parsing mode.
+ * @returns {ITokenizerHandle} Tokenizer handle
+ */
+function tokenize(source, alternateCommentMode) {
+    /* eslint-disable callback-return */
+    source = source.toString();
+
+    var offset = 0,
+        length = source.length,
+        line = 1,
+        commentType = null,
+        commentText = null,
+        commentLine = 0,
+        commentLineEmpty = false;
+
+    var stack = [];
+
+    var stringDelim = null;
+
+    /* istanbul ignore next */
+    /**
+     * Creates an error for illegal syntax.
+     * @param {string} subject Subject
+     * @returns {Error} Error created
+     * @inner
+     */
+    function illegal(subject) {
+        return Error("illegal " + subject + " (line " + line + ")");
+    }
+
+    /**
+     * Reads a string till its end.
+     * @returns {string} String read
+     * @inner
+     */
+    function readString() {
+        var re = stringDelim === "'" ? stringSingleRe : stringDoubleRe;
+        re.lastIndex = offset - 1;
+        var match = re.exec(source);
+        if (!match)
+            throw illegal("string");
+        offset = re.lastIndex;
+        push(stringDelim);
+        stringDelim = null;
+        return unescape(match[1]);
+    }
+
+    /**
+     * Gets the character at `pos` within the source.
+     * @param {number} pos Position
+     * @returns {string} Character
+     * @inner
+     */
+    function charAt(pos) {
+        return source.charAt(pos);
+    }
+
+    /**
+     * Sets the current comment text.
+     * @param {number} start Start offset
+     * @param {number} end End offset
+     * @returns {undefined}
+     * @inner
+     */
+    function setComment(start, end) {
+        commentType = source.charAt(start++);
+        commentLine = line;
+        commentLineEmpty = false;
+        var lookback;
+        if (alternateCommentMode) {
+            lookback = 2;  // alternate comment parsing: "//" or "/*"
+        } else {
+            lookback = 3;  // "///" or "/**"
+        }
+        var commentOffset = start - lookback,
+            c;
+        do {
+            if (--commentOffset < 0 ||
+                    (c = source.charAt(commentOffset)) === "\n") {
+                commentLineEmpty = true;
+                break;
+            }
+        } while (c === " " || c === "\t");
+        var lines = source
+            .substring(start, end)
+            .split(setCommentSplitRe);
+        for (var i = 0; i < lines.length; ++i)
+            lines[i] = lines[i]
+                .replace(alternateCommentMode ? setCommentAltRe : setCommentRe, "")
+                .trim();
+        commentText = lines
+            .join("\n")
+            .trim();
+    }
+
+    function isDoubleSlashCommentLine(startOffset) {
+        var endOffset = findEndOfLine(startOffset);
+
+        // see if remaining line matches comment pattern
+        var lineText = source.substring(startOffset, endOffset);
+        // look for 1 or 2 slashes since startOffset would already point past
+        // the first slash that started the comment.
+        var isComment = /^\s*\/{1,2}/.test(lineText);
+        return isComment;
+    }
+
+    function findEndOfLine(cursor) {
+        // find end of cursor's line
+        var endOffset = cursor;
+        while (endOffset < length && charAt(endOffset) !== "\n") {
+            endOffset++;
+        }
+        return endOffset;
+    }
+
+    /**
+     * Obtains the next token.
+     * @returns {string|null} Next token or `null` on eof
+     * @inner
+     */
+    function next() {
+        if (stack.length > 0)
+            return stack.shift();
+        if (stringDelim)
+            return readString();
+        var repeat,
+            prev,
+            curr,
+            start,
+            isDoc;
+        do {
+            if (offset === length)
+                return null;
+            repeat = false;
+            while (whitespaceRe.test(curr = charAt(offset))) {
+                if (curr === "\n")
+                    ++line;
+                if (++offset === length)
+                    return null;
+            }
+
+            if (charAt(offset) === "/") {
+                if (++offset === length) {
+                    throw illegal("comment");
+                }
+                if (charAt(offset) === "/") { // Line
+                    if (!alternateCommentMode) {
+                        // check for triple-slash comment
+                        isDoc = charAt(start = offset + 1) === "/";
+
+                        while (charAt(++offset) !== "\n") {
+                            if (offset === length) {
+                                return null;
+                            }
+                        }
+                        ++offset;
+                        if (isDoc) {
+                            setComment(start, offset - 1);
+                        }
+                        ++line;
+                        repeat = true;
+                    } else {
+                        // check for double-slash comments, consolidating consecutive lines
+                        start = offset;
+                        isDoc = false;
+                        if (isDoubleSlashCommentLine(offset)) {
+                            isDoc = true;
+                            do {
+                                offset = findEndOfLine(offset);
+                                if (offset === length) {
+                                    break;
+                                }
+                                offset++;
+                            } while (isDoubleSlashCommentLine(offset));
+                        } else {
+                            offset = Math.min(length, findEndOfLine(offset) + 1);
+                        }
+                        if (isDoc) {
+                            setComment(start, offset);
+                        }
+                        line++;
+                        repeat = true;
+                    }
+                } else if ((curr = charAt(offset)) === "*") { /* Block */
+                    // check for /** (regular comment mode) or /* (alternate comment mode)
+                    start = offset + 1;
+                    isDoc = alternateCommentMode || charAt(start) === "*";
+                    do {
+                        if (curr === "\n") {
+                            ++line;
+                        }
+                        if (++offset === length) {
+                            throw illegal("comment");
+                        }
+                        prev = curr;
+                        curr = charAt(offset);
+                    } while (prev !== "*" || curr !== "/");
+                    ++offset;
+                    if (isDoc) {
+                        setComment(start, offset - 2);
+                    }
+                    repeat = true;
+                } else {
+                    return "/";
+                }
+            }
+        } while (repeat);
+
+        // offset !== length if we got here
+
+        var end = offset;
+        delimRe.lastIndex = 0;
+        var delim = delimRe.test(charAt(end++));
+        if (!delim)
+            while (end < length && !delimRe.test(charAt(end)))
+                ++end;
+        var token = source.substring(offset, offset = end);
+        if (token === "\"" || token === "'")
+            stringDelim = token;
+        return token;
+    }
+
+    /**
+     * Pushes a token back to the stack.
+     * @param {string} token Token
+     * @returns {undefined}
+     * @inner
+     */
+    function push(token) {
+        stack.push(token);
+    }
+
+    /**
+     * Peeks for the next token.
+     * @returns {string|null} Token or `null` on eof
+     * @inner
+     */
+    function peek() {
+        if (!stack.length) {
+            var token = next();
+            if (token === null)
+                return null;
+            push(token);
+        }
+        return stack[0];
+    }
+
+    /**
+     * Skips a token.
+     * @param {string} expected Expected token
+     * @param {boolean} [optional=false] Whether the token is optional
+     * @returns {boolean} `true` when skipped, `false` if not
+     * @throws {Error} When a required token is not present
+     * @inner
+     */
+    function skip(expected, optional) {
+        var actual = peek(),
+            equals = actual === expected;
+        if (equals) {
+            next();
+            return true;
+        }
+        if (!optional)
+            throw illegal("token '" + actual + "', '" + expected + "' expected");
+        return false;
+    }
+
+    /**
+     * Gets a comment.
+     * @param {number} [trailingLine] Line number if looking for a trailing comment
+     * @returns {string|null} Comment text
+     * @inner
+     */
+    function cmnt(trailingLine) {
+        var ret = null;
+        if (trailingLine === undefined) {
+            if (commentLine === line - 1 && (alternateCommentMode || commentType === "*" || commentLineEmpty)) {
+                ret = commentText;
+            }
+        } else {
+            /* istanbul ignore else */
+            if (commentLine < trailingLine) {
+                peek();
+            }
+            if (commentLine === trailingLine && !commentLineEmpty && (alternateCommentMode || commentType === "/")) {
+                ret = commentText;
+            }
+        }
+        return ret;
+    }
+
+    return Object.defineProperty({
+        next: next,
+        peek: peek,
+        push: push,
+        skip: skip,
+        cmnt: cmnt
+    }, "line", {
+        get: function() { return line; }
+    });
+    /* eslint-enable callback-return */
+}
+
+
+/***/ }),
+/* 37 */
+/***/ (function(module, exports) {
+
+module.exports = require("events");
+
+/***/ }),
+/* 38 */
+/***/ (function(module, exports) {
+
+module.exports = require("child_process");
+
+/***/ }),
+/* 39 */
+/***/ (function(module, exports) {
+
+module.exports = require("path");
+
+/***/ }),
+/* 40 */
+/***/ (function(module, exports) {
+
+module.exports = require("util");
+
+/***/ }),
+/* 41 */
+/***/ (function(module, exports) {
+
+module.exports = function(module) {
+	if (!module.webpackPolyfill) {
+		module.deprecate = function() {};
+		module.paths = [];
+		// module.parent = undefined by default
+		if (!module.children) module.children = [];
+		Object.defineProperty(module, "loaded", {
+			enumerable: true,
+			get: function() {
+				return module.l;
+			}
+		});
+		Object.defineProperty(module, "id", {
+			enumerable: true,
+			get: function() {
+				return module.i;
+			}
+		});
+		module.webpackPolyfill = 1;
+	}
+	return module;
+};
+
+
+/***/ }),
+/* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -22335,7 +25431,7 @@ var apiRejection = function(msg) {
 };
 function Proxyable() {}
 var UNDEFINED_BINDING = {};
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 
 var getDomain;
 if (util.isNode) {
@@ -22351,11 +25447,11 @@ if (util.isNode) {
 }
 util.notEnumerableProp(Promise, "_getDomain", getDomain);
 
-var es5 = __webpack_require__(11);
-var Async = __webpack_require__(25);
+var es5 = __webpack_require__(6);
+var Async = __webpack_require__(43);
 var async = new Async();
 es5.defineProperty(Promise, "_async", {value: async});
-var errors = __webpack_require__(10);
+var errors = __webpack_require__(5);
 var TypeError = Promise.TypeError = errors.TypeError;
 Promise.RangeError = errors.RangeError;
 var CancellationError = Promise.CancellationError = errors.CancellationError;
@@ -22366,19 +25462,19 @@ Promise.AggregateError = errors.AggregateError;
 var INTERNAL = function(){};
 var APPLY = {};
 var NEXT_FILTER = {};
-var tryConvertToPromise = __webpack_require__(28)(Promise, INTERNAL);
+var tryConvertToPromise = __webpack_require__(46)(Promise, INTERNAL);
 var PromiseArray =
-    __webpack_require__(29)(Promise, INTERNAL,
+    __webpack_require__(47)(Promise, INTERNAL,
                                tryConvertToPromise, apiRejection, Proxyable);
-var Context = __webpack_require__(30)(Promise);
+var Context = __webpack_require__(48)(Promise);
  /*jshint unused:false*/
 var createContext = Context.create;
-var debug = __webpack_require__(31)(Promise, Context);
+var debug = __webpack_require__(49)(Promise, Context);
 var CapturedTrace = debug.CapturedTrace;
 var PassThroughHandlerContext =
-    __webpack_require__(32)(Promise, tryConvertToPromise, NEXT_FILTER);
-var catchFilter = __webpack_require__(19)(NEXT_FILTER);
-var nodebackForPromise = __webpack_require__(20);
+    __webpack_require__(50)(Promise, tryConvertToPromise, NEXT_FILTER);
+var catchFilter = __webpack_require__(25)(NEXT_FILTER);
+var nodebackForPromise = __webpack_require__(26);
 var errorObj = util.errorObj;
 var tryCatch = util.tryCatch;
 function check(self, executor) {
@@ -23049,31 +26145,31 @@ util.notEnumerableProp(Promise,
                        "_makeSelfResolutionError",
                        makeSelfResolutionError);
 
-__webpack_require__(33)(Promise, INTERNAL, tryConvertToPromise, apiRejection,
+__webpack_require__(51)(Promise, INTERNAL, tryConvertToPromise, apiRejection,
     debug);
-__webpack_require__(34)(Promise, INTERNAL, tryConvertToPromise, debug);
-__webpack_require__(35)(Promise, PromiseArray, apiRejection, debug);
-__webpack_require__(36)(Promise);
-__webpack_require__(37)(Promise);
-__webpack_require__(38)(
+__webpack_require__(52)(Promise, INTERNAL, tryConvertToPromise, debug);
+__webpack_require__(53)(Promise, PromiseArray, apiRejection, debug);
+__webpack_require__(54)(Promise);
+__webpack_require__(55)(Promise);
+__webpack_require__(56)(
     Promise, PromiseArray, tryConvertToPromise, INTERNAL, async, getDomain);
 Promise.Promise = Promise;
 Promise.version = "3.5.3";
-__webpack_require__(39)(Promise, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL, debug);
-__webpack_require__(40)(Promise);
-__webpack_require__(41)(Promise, apiRejection, tryConvertToPromise, createContext, INTERNAL, debug);
-__webpack_require__(42)(Promise, INTERNAL, debug);
-__webpack_require__(43)(Promise, apiRejection, INTERNAL, tryConvertToPromise, Proxyable, debug);
-__webpack_require__(44)(Promise);
-__webpack_require__(45)(Promise, INTERNAL);
-__webpack_require__(46)(Promise, PromiseArray, tryConvertToPromise, apiRejection);
-__webpack_require__(47)(Promise, INTERNAL, tryConvertToPromise, apiRejection);
-__webpack_require__(48)(Promise, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL, debug);
-__webpack_require__(49)(Promise, PromiseArray, debug);
-__webpack_require__(50)(Promise, PromiseArray, apiRejection);
-__webpack_require__(51)(Promise, INTERNAL);
-__webpack_require__(52)(Promise, INTERNAL);
-__webpack_require__(53)(Promise);
+__webpack_require__(57)(Promise, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL, debug);
+__webpack_require__(58)(Promise);
+__webpack_require__(59)(Promise, apiRejection, tryConvertToPromise, createContext, INTERNAL, debug);
+__webpack_require__(60)(Promise, INTERNAL, debug);
+__webpack_require__(61)(Promise, apiRejection, INTERNAL, tryConvertToPromise, Proxyable, debug);
+__webpack_require__(62)(Promise);
+__webpack_require__(63)(Promise, INTERNAL);
+__webpack_require__(64)(Promise, PromiseArray, tryConvertToPromise, apiRejection);
+__webpack_require__(65)(Promise, INTERNAL, tryConvertToPromise, apiRejection);
+__webpack_require__(66)(Promise, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL, debug);
+__webpack_require__(67)(Promise, PromiseArray, debug);
+__webpack_require__(68)(Promise, PromiseArray, apiRejection);
+__webpack_require__(69)(Promise, INTERNAL);
+__webpack_require__(70)(Promise, INTERNAL);
+__webpack_require__(71)(Promise);
                                                          
     util.toFastProperties(Promise);                                          
     util.toFastProperties(Promise.prototype);                                
@@ -23101,16 +26197,16 @@ __webpack_require__(53)(Promise);
 
 
 /***/ }),
-/* 25 */
+/* 43 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 var firstLineError;
 try {throw new Error(); } catch (e) {firstLineError = e;}
-var schedule = __webpack_require__(26);
-var Queue = __webpack_require__(27);
-var util = __webpack_require__(2);
+var schedule = __webpack_require__(44);
+var Queue = __webpack_require__(45);
+var util = __webpack_require__(0);
 
 function Async() {
     this._customScheduler = false;
@@ -23273,12 +26369,12 @@ module.exports.firstLineError = firstLineError;
 
 
 /***/ }),
-/* 26 */
+/* 44 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var schedule;
 var noAsyncScheduler = function() {
     throw new Error("No async scheduler available\u000a\u000a    See http://goo.gl/MqrFmX\u000a");
@@ -23341,7 +26437,7 @@ module.exports = schedule;
 
 
 /***/ }),
-/* 27 */
+/* 45 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -23421,13 +26517,13 @@ module.exports = Queue;
 
 
 /***/ }),
-/* 28 */
+/* 46 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise, INTERNAL) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var errorObj = util.errorObj;
 var isObject = util.isObject;
 
@@ -23514,14 +26610,14 @@ return tryConvertToPromise;
 
 
 /***/ }),
-/* 29 */
+/* 47 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise, INTERNAL, tryConvertToPromise,
     apiRejection, Proxyable) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var isArray = util.isArray;
 
 function toResolutionValue(val) {
@@ -23706,7 +26802,7 @@ return PromiseArray;
 
 
 /***/ }),
-/* 30 */
+/* 48 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -23782,7 +26878,7 @@ return Context;
 
 
 /***/ }),
-/* 31 */
+/* 49 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -23790,9 +26886,9 @@ return Context;
 module.exports = function(Promise, Context) {
 var getDomain = Promise._getDomain;
 var async = Promise._async;
-var Warning = __webpack_require__(10).Warning;
-var util = __webpack_require__(2);
-var es5 = __webpack_require__(11);
+var Warning = __webpack_require__(5).Warning;
+var util = __webpack_require__(0);
+var es5 = __webpack_require__(6);
 var canAttachTrace = util.canAttachTrace;
 var unhandledRejectionHandled;
 var possiblyUnhandledRejection;
@@ -24723,16 +27819,16 @@ return {
 
 
 /***/ }),
-/* 32 */
+/* 50 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise, tryConvertToPromise, NEXT_FILTER) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var CancellationError = Promise.CancellationError;
 var errorObj = util.errorObj;
-var catchFilter = __webpack_require__(19)(NEXT_FILTER);
+var catchFilter = __webpack_require__(25)(NEXT_FILTER);
 
 function PassThroughHandlerContext(promise, type, handler) {
     this.promise = promise;
@@ -24876,14 +27972,14 @@ return PassThroughHandlerContext;
 
 
 /***/ }),
-/* 33 */
+/* 51 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports =
 function(Promise, INTERNAL, tryConvertToPromise, apiRejection, debug) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var tryCatch = util.tryCatch;
 
 Promise.method = function (fn) {
@@ -24938,7 +28034,7 @@ Promise.prototype._resolveFromSyncValue = function (value) {
 
 
 /***/ }),
-/* 34 */
+/* 52 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25012,13 +28108,13 @@ Promise.bind = function (thisArg, value) {
 
 
 /***/ }),
-/* 35 */
+/* 53 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise, PromiseArray, apiRejection, debug) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var tryCatch = util.tryCatch;
 var errorObj = util.errorObj;
 var async = Promise._async;
@@ -25148,7 +28244,7 @@ Promise.prototype._resultCancelled = function() {
 
 
 /***/ }),
-/* 36 */
+/* 54 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25201,7 +28297,7 @@ Promise.prototype.catchReturn = function (value) {
 
 
 /***/ }),
-/* 37 */
+/* 55 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25311,7 +28407,7 @@ Promise.PromiseInspection = PromiseInspection;
 
 
 /***/ }),
-/* 38 */
+/* 56 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25319,7 +28415,7 @@ Promise.PromiseInspection = PromiseInspection;
 module.exports =
 function(Promise, PromiseArray, tryConvertToPromise, INTERNAL, async,
          getDomain) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var canEvaluate = util.canEvaluate;
 var tryCatch = util.tryCatch;
 var errorObj = util.errorObj;
@@ -25486,7 +28582,7 @@ Promise.join = function () {
 
 
 /***/ }),
-/* 39 */
+/* 57 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25498,7 +28594,7 @@ module.exports = function(Promise,
                           INTERNAL,
                           debug) {
 var getDomain = Promise._getDomain;
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var tryCatch = util.tryCatch;
 var errorObj = util.errorObj;
 var async = Promise._async;
@@ -25661,7 +28757,7 @@ Promise.map = function (promises, fn, options, _filter) {
 
 
 /***/ }),
-/* 40 */
+/* 58 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25674,7 +28770,7 @@ if (cr) {
 }
 
 module.exports = function(Promise) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var canEvaluate = util.canEvaluate;
 var isIdentifier = util.isIdentifier;
 
@@ -25791,16 +28887,16 @@ Promise.prototype.get = function (propertyName) {
 
 
 /***/ }),
-/* 41 */
+/* 59 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function (Promise, apiRejection, tryConvertToPromise,
     createContext, INTERNAL, debug) {
-    var util = __webpack_require__(2);
-    var TypeError = __webpack_require__(10).TypeError;
-    var inherits = __webpack_require__(2).inherits;
+    var util = __webpack_require__(0);
+    var TypeError = __webpack_require__(5).TypeError;
+    var inherits = __webpack_require__(0).inherits;
     var errorObj = util.errorObj;
     var tryCatch = util.tryCatch;
     var NULL = {};
@@ -26024,13 +29120,13 @@ module.exports = function (Promise, apiRejection, tryConvertToPromise,
 
 
 /***/ }),
-/* 42 */
+/* 60 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise, INTERNAL, debug) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var TimeoutError = Promise.TimeoutError;
 
 function HandleWrapper(handle)  {
@@ -26124,7 +29220,7 @@ Promise.prototype.timeout = function (ms, message) {
 
 
 /***/ }),
-/* 43 */
+/* 61 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -26135,9 +29231,9 @@ module.exports = function(Promise,
                           tryConvertToPromise,
                           Proxyable,
                           debug) {
-var errors = __webpack_require__(10);
+var errors = __webpack_require__(5);
 var TypeError = errors.TypeError;
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var errorObj = util.errorObj;
 var tryCatch = util.tryCatch;
 var yieldHandlers = [];
@@ -26354,13 +29450,13 @@ Promise.spawn = function (generatorFunction) {
 
 
 /***/ }),
-/* 44 */
+/* 62 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var async = Promise._async;
 var tryCatch = util.tryCatch;
 var errorObj = util.errorObj;
@@ -26419,19 +29515,19 @@ Promise.prototype.asCallback = Promise.prototype.nodeify = function (nodeback,
 
 
 /***/ }),
-/* 45 */
+/* 63 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(Promise, INTERNAL) {
 var THIS = {};
-var util = __webpack_require__(2);
-var nodebackForPromise = __webpack_require__(20);
+var util = __webpack_require__(0);
+var nodebackForPromise = __webpack_require__(26);
 var withAppended = util.withAppended;
 var maybeWrapAsError = util.maybeWrapAsError;
 var canEvaluate = util.canEvaluate;
-var TypeError = __webpack_require__(10).TypeError;
+var TypeError = __webpack_require__(5).TypeError;
 var defaultSuffix = "Async";
 var defaultPromisified = {__isPromisified__: true};
 var noCopyProps = [
@@ -26740,16 +29836,16 @@ Promise.promisifyAll = function (target, options) {
 
 
 /***/ }),
-/* 46 */
+/* 64 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(
     Promise, PromiseArray, tryConvertToPromise, apiRejection) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var isObject = util.isObject;
-var es5 = __webpack_require__(11);
+var es5 = __webpack_require__(6);
 var Es6Map;
 if (typeof Map === "function") Es6Map = Map;
 
@@ -26865,14 +29961,14 @@ Promise.props = function (promises) {
 
 
 /***/ }),
-/* 47 */
+/* 65 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports = function(
     Promise, INTERNAL, tryConvertToPromise, apiRejection) {
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 
 var raceLater = function (promise) {
     return promise.then(function(array) {
@@ -26921,7 +30017,7 @@ Promise.prototype.race = function () {
 
 
 /***/ }),
-/* 48 */
+/* 66 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -26933,7 +30029,7 @@ module.exports = function(Promise,
                           INTERNAL,
                           debug) {
 var getDomain = Promise._getDomain;
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 var tryCatch = util.tryCatch;
 
 function ReductionPromiseArray(promises, fn, initialValue, _each) {
@@ -27100,7 +30196,7 @@ function gotValue(value) {
 
 
 /***/ }),
-/* 49 */
+/* 67 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -27108,7 +30204,7 @@ function gotValue(value) {
 module.exports =
     function(Promise, PromiseArray, debug) {
 var PromiseInspection = Promise.PromiseInspection;
-var util = __webpack_require__(2);
+var util = __webpack_require__(0);
 
 function SettledPromiseArray(values) {
     this.constructor$(values);
@@ -27150,16 +30246,16 @@ Promise.prototype.settle = function () {
 
 
 /***/ }),
-/* 50 */
+/* 68 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 module.exports =
 function(Promise, PromiseArray, apiRejection) {
-var util = __webpack_require__(2);
-var RangeError = __webpack_require__(10).RangeError;
-var AggregateError = __webpack_require__(10).AggregateError;
+var util = __webpack_require__(0);
+var RangeError = __webpack_require__(5).RangeError;
+var AggregateError = __webpack_require__(5).AggregateError;
 var isArray = util.isArray;
 var CANCELLATION = {};
 
@@ -27305,7 +30401,7 @@ Promise._SomePromiseArray = SomePromiseArray;
 
 
 /***/ }),
-/* 51 */
+/* 69 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -27324,7 +30420,7 @@ Promise.filter = function (promises, fn, options) {
 
 
 /***/ }),
-/* 52 */
+/* 70 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -27361,7 +30457,7 @@ Promise.mapSeries = PromiseMapSeries;
 
 
 /***/ }),
-/* 53 */
+/* 71 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -27389,2939 +30485,17 @@ Promise.prototype.any = function () {
 
 
 /***/ }),
-/* 54 */
+/* 72 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-module.exports = Type;
-
-// extends Namespace
-var Namespace = __webpack_require__(17);
-((Type.prototype = Object.create(Namespace.prototype)).constructor = Type).className = "Type";
-
-var Enum      = __webpack_require__(12),
-    OneOf     = __webpack_require__(21),
-    Field     = __webpack_require__(14),
-    MapField  = __webpack_require__(55),
-    Service   = __webpack_require__(56),
-    Message   = __webpack_require__(58),
-    Reader    = __webpack_require__(23),
-    Writer    = __webpack_require__(22),
-    util      = __webpack_require__(9),
-    encoder   = __webpack_require__(64),
-    decoder   = __webpack_require__(65),
-    verifier  = __webpack_require__(66),
-    converter = __webpack_require__(67),
-    wrappers  = __webpack_require__(68);
-
-/**
- * Constructs a new reflected message type instance.
- * @classdesc Reflected message type.
- * @extends NamespaceBase
- * @constructor
- * @param {string} name Message name
- * @param {Object.<string,*>} [options] Declared options
- */
-function Type(name, options) {
-    Namespace.call(this, name, options);
-
-    /**
-     * Message fields.
-     * @type {Object.<string,Field>}
-     */
-    this.fields = {};  // toJSON, marker
-
-    /**
-     * Oneofs declared within this namespace, if any.
-     * @type {Object.<string,OneOf>}
-     */
-    this.oneofs = undefined; // toJSON
-
-    /**
-     * Extension ranges, if any.
-     * @type {number[][]}
-     */
-    this.extensions = undefined; // toJSON
-
-    /**
-     * Reserved ranges, if any.
-     * @type {Array.<number[]|string>}
-     */
-    this.reserved = undefined; // toJSON
-
-    /*?
-     * Whether this type is a legacy group.
-     * @type {boolean|undefined}
-     */
-    this.group = undefined; // toJSON
-
-    /**
-     * Cached fields by id.
-     * @type {Object.<number,Field>|null}
-     * @private
-     */
-    this._fieldsById = null;
-
-    /**
-     * Cached fields as an array.
-     * @type {Field[]|null}
-     * @private
-     */
-    this._fieldsArray = null;
-
-    /**
-     * Cached oneofs as an array.
-     * @type {OneOf[]|null}
-     * @private
-     */
-    this._oneofsArray = null;
-
-    /**
-     * Cached constructor.
-     * @type {Constructor<{}>}
-     * @private
-     */
-    this._ctor = null;
-}
-
-Object.defineProperties(Type.prototype, {
-
-    /**
-     * Message fields by id.
-     * @name Type#fieldsById
-     * @type {Object.<number,Field>}
-     * @readonly
-     */
-    fieldsById: {
-        get: function() {
-
-            /* istanbul ignore if */
-            if (this._fieldsById)
-                return this._fieldsById;
-
-            this._fieldsById = {};
-            for (var names = Object.keys(this.fields), i = 0; i < names.length; ++i) {
-                var field = this.fields[names[i]],
-                    id = field.id;
-
-                /* istanbul ignore if */
-                if (this._fieldsById[id])
-                    throw Error("duplicate id " + id + " in " + this);
-
-                this._fieldsById[id] = field;
-            }
-            return this._fieldsById;
-        }
-    },
-
-    /**
-     * Fields of this message as an array for iteration.
-     * @name Type#fieldsArray
-     * @type {Field[]}
-     * @readonly
-     */
-    fieldsArray: {
-        get: function() {
-            return this._fieldsArray || (this._fieldsArray = util.toArray(this.fields));
-        }
-    },
-
-    /**
-     * Oneofs of this message as an array for iteration.
-     * @name Type#oneofsArray
-     * @type {OneOf[]}
-     * @readonly
-     */
-    oneofsArray: {
-        get: function() {
-            return this._oneofsArray || (this._oneofsArray = util.toArray(this.oneofs));
-        }
-    },
-
-    /**
-     * The registered constructor, if any registered, otherwise a generic constructor.
-     * Assigning a function replaces the internal constructor. If the function does not extend {@link Message} yet, its prototype will be setup accordingly and static methods will be populated. If it already extends {@link Message}, it will just replace the internal constructor.
-     * @name Type#ctor
-     * @type {Constructor<{}>}
-     */
-    ctor: {
-        get: function() {
-            return this._ctor || (this.ctor = Type.generateConstructor(this)());
-        },
-        set: function(ctor) {
-
-            // Ensure proper prototype
-            var prototype = ctor.prototype;
-            if (!(prototype instanceof Message)) {
-                (ctor.prototype = new Message()).constructor = ctor;
-                util.merge(ctor.prototype, prototype);
-            }
-
-            // Classes and messages reference their reflected type
-            ctor.$type = ctor.prototype.$type = this;
-
-            // Mix in static methods
-            util.merge(ctor, Message, true);
-
-            this._ctor = ctor;
-
-            // Messages have non-enumerable default values on their prototype
-            var i = 0;
-            for (; i < /* initializes */ this.fieldsArray.length; ++i)
-                this._fieldsArray[i].resolve(); // ensures a proper value
-
-            // Messages have non-enumerable getters and setters for each virtual oneof field
-            var ctorProperties = {};
-            for (i = 0; i < /* initializes */ this.oneofsArray.length; ++i)
-                ctorProperties[this._oneofsArray[i].resolve().name] = {
-                    get: util.oneOfGetter(this._oneofsArray[i].oneof),
-                    set: util.oneOfSetter(this._oneofsArray[i].oneof)
-                };
-            if (i)
-                Object.defineProperties(ctor.prototype, ctorProperties);
-        }
-    }
-});
-
-/**
- * Generates a constructor function for the specified type.
- * @param {Type} mtype Message type
- * @returns {Codegen} Codegen instance
- */
-Type.generateConstructor = function generateConstructor(mtype) {
-    /* eslint-disable no-unexpected-multiline */
-    var gen = util.codegen(["p"], mtype.name);
-    // explicitly initialize mutable object/array fields so that these aren't just inherited from the prototype
-    for (var i = 0, field; i < mtype.fieldsArray.length; ++i)
-        if ((field = mtype._fieldsArray[i]).map) gen
-            ("this%s={}", util.safeProp(field.name));
-        else if (field.repeated) gen
-            ("this%s=[]", util.safeProp(field.name));
-    return gen
-    ("if(p)for(var ks=Object.keys(p),i=0;i<ks.length;++i)if(p[ks[i]]!=null)") // omit undefined or null
-        ("this[ks[i]]=p[ks[i]]");
-    /* eslint-enable no-unexpected-multiline */
-};
-
-function clearCache(type) {
-    type._fieldsById = type._fieldsArray = type._oneofsArray = null;
-    delete type.encode;
-    delete type.decode;
-    delete type.verify;
-    return type;
-}
-
-/**
- * Message type descriptor.
- * @interface IType
- * @extends INamespace
- * @property {Object.<string,IOneOf>} [oneofs] Oneof descriptors
- * @property {Object.<string,IField>} fields Field descriptors
- * @property {number[][]} [extensions] Extension ranges
- * @property {number[][]} [reserved] Reserved ranges
- * @property {boolean} [group=false] Whether a legacy group or not
- */
-
-/**
- * Creates a message type from a message type descriptor.
- * @param {string} name Message name
- * @param {IType} json Message type descriptor
- * @returns {Type} Created message type
- */
-Type.fromJSON = function fromJSON(name, json) {
-    var type = new Type(name, json.options);
-    type.extensions = json.extensions;
-    type.reserved = json.reserved;
-    var names = Object.keys(json.fields),
-        i = 0;
-    for (; i < names.length; ++i)
-        type.add(
-            ( typeof json.fields[names[i]].keyType !== "undefined"
-            ? MapField.fromJSON
-            : Field.fromJSON )(names[i], json.fields[names[i]])
-        );
-    if (json.oneofs)
-        for (names = Object.keys(json.oneofs), i = 0; i < names.length; ++i)
-            type.add(OneOf.fromJSON(names[i], json.oneofs[names[i]]));
-    if (json.nested)
-        for (names = Object.keys(json.nested), i = 0; i < names.length; ++i) {
-            var nested = json.nested[names[i]];
-            type.add( // most to least likely
-                ( nested.id !== undefined
-                ? Field.fromJSON
-                : nested.fields !== undefined
-                ? Type.fromJSON
-                : nested.values !== undefined
-                ? Enum.fromJSON
-                : nested.methods !== undefined
-                ? Service.fromJSON
-                : Namespace.fromJSON )(names[i], nested)
-            );
-        }
-    if (json.extensions && json.extensions.length)
-        type.extensions = json.extensions;
-    if (json.reserved && json.reserved.length)
-        type.reserved = json.reserved;
-    if (json.group)
-        type.group = true;
-    if (json.comment)
-        type.comment = json.comment;
-    return type;
-};
-
-/**
- * Converts this message type to a message type descriptor.
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {IType} Message type descriptor
- */
-Type.prototype.toJSON = function toJSON(toJSONOptions) {
-    var inherited = Namespace.prototype.toJSON.call(this, toJSONOptions);
-    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
-    return util.toObject([
-        "options"    , inherited && inherited.options || undefined,
-        "oneofs"     , Namespace.arrayToJSON(this.oneofsArray, toJSONOptions),
-        "fields"     , Namespace.arrayToJSON(this.fieldsArray.filter(function(obj) { return !obj.declaringField; }), toJSONOptions) || {},
-        "extensions" , this.extensions && this.extensions.length ? this.extensions : undefined,
-        "reserved"   , this.reserved && this.reserved.length ? this.reserved : undefined,
-        "group"      , this.group || undefined,
-        "nested"     , inherited && inherited.nested || undefined,
-        "comment"    , keepComments ? this.comment : undefined
-    ]);
-};
-
-/**
- * @override
- */
-Type.prototype.resolveAll = function resolveAll() {
-    var fields = this.fieldsArray, i = 0;
-    while (i < fields.length)
-        fields[i++].resolve();
-    var oneofs = this.oneofsArray; i = 0;
-    while (i < oneofs.length)
-        oneofs[i++].resolve();
-    return Namespace.prototype.resolveAll.call(this);
-};
-
-/**
- * @override
- */
-Type.prototype.get = function get(name) {
-    return this.fields[name]
-        || this.oneofs && this.oneofs[name]
-        || this.nested && this.nested[name]
-        || null;
-};
-
-/**
- * Adds a nested object to this type.
- * @param {ReflectionObject} object Nested object to add
- * @returns {Type} `this`
- * @throws {TypeError} If arguments are invalid
- * @throws {Error} If there is already a nested object with this name or, if a field, when there is already a field with this id
- */
-Type.prototype.add = function add(object) {
-
-    if (this.get(object.name))
-        throw Error("duplicate name '" + object.name + "' in " + this);
-
-    if (object instanceof Field && object.extend === undefined) {
-        // NOTE: Extension fields aren't actual fields on the declaring type, but nested objects.
-        // The root object takes care of adding distinct sister-fields to the respective extended
-        // type instead.
-
-        // avoids calling the getter if not absolutely necessary because it's called quite frequently
-        if (this._fieldsById ? /* istanbul ignore next */ this._fieldsById[object.id] : this.fieldsById[object.id])
-            throw Error("duplicate id " + object.id + " in " + this);
-        if (this.isReservedId(object.id))
-            throw Error("id " + object.id + " is reserved in " + this);
-        if (this.isReservedName(object.name))
-            throw Error("name '" + object.name + "' is reserved in " + this);
-
-        if (object.parent)
-            object.parent.remove(object);
-        this.fields[object.name] = object;
-        object.message = this;
-        object.onAdd(this);
-        return clearCache(this);
-    }
-    if (object instanceof OneOf) {
-        if (!this.oneofs)
-            this.oneofs = {};
-        this.oneofs[object.name] = object;
-        object.onAdd(this);
-        return clearCache(this);
-    }
-    return Namespace.prototype.add.call(this, object);
-};
-
-/**
- * Removes a nested object from this type.
- * @param {ReflectionObject} object Nested object to remove
- * @returns {Type} `this`
- * @throws {TypeError} If arguments are invalid
- * @throws {Error} If `object` is not a member of this type
- */
-Type.prototype.remove = function remove(object) {
-    if (object instanceof Field && object.extend === undefined) {
-        // See Type#add for the reason why extension fields are excluded here.
-
-        /* istanbul ignore if */
-        if (!this.fields || this.fields[object.name] !== object)
-            throw Error(object + " is not a member of " + this);
-
-        delete this.fields[object.name];
-        object.parent = null;
-        object.onRemove(this);
-        return clearCache(this);
-    }
-    if (object instanceof OneOf) {
-
-        /* istanbul ignore if */
-        if (!this.oneofs || this.oneofs[object.name] !== object)
-            throw Error(object + " is not a member of " + this);
-
-        delete this.oneofs[object.name];
-        object.parent = null;
-        object.onRemove(this);
-        return clearCache(this);
-    }
-    return Namespace.prototype.remove.call(this, object);
-};
-
-/**
- * Tests if the specified id is reserved.
- * @param {number} id Id to test
- * @returns {boolean} `true` if reserved, otherwise `false`
- */
-Type.prototype.isReservedId = function isReservedId(id) {
-    return Namespace.isReservedId(this.reserved, id);
-};
-
-/**
- * Tests if the specified name is reserved.
- * @param {string} name Name to test
- * @returns {boolean} `true` if reserved, otherwise `false`
- */
-Type.prototype.isReservedName = function isReservedName(name) {
-    return Namespace.isReservedName(this.reserved, name);
-};
-
-/**
- * Creates a new message of this type using the specified properties.
- * @param {Object.<string,*>} [properties] Properties to set
- * @returns {Message<{}>} Message instance
- */
-Type.prototype.create = function create(properties) {
-    return new this.ctor(properties);
-};
-
-/**
- * Sets up {@link Type#encode|encode}, {@link Type#decode|decode} and {@link Type#verify|verify}.
- * @returns {Type} `this`
- */
-Type.prototype.setup = function setup() {
-    // Sets up everything at once so that the prototype chain does not have to be re-evaluated
-    // multiple times (V8, soft-deopt prototype-check).
-
-    var fullName = this.fullName,
-        types    = [];
-    for (var i = 0; i < /* initializes */ this.fieldsArray.length; ++i)
-        types.push(this._fieldsArray[i].resolve().resolvedType);
-
-    // Replace setup methods with type-specific generated functions
-    this.encode = encoder(this)({
-        Writer : Writer,
-        types  : types,
-        util   : util
-    });
-    this.decode = decoder(this)({
-        Reader : Reader,
-        types  : types,
-        util   : util
-    });
-    this.verify = verifier(this)({
-        types : types,
-        util  : util
-    });
-    this.fromObject = converter.fromObject(this)({
-        types : types,
-        util  : util
-    });
-    this.toObject = converter.toObject(this)({
-        types : types,
-        util  : util
-    });
-
-    // Inject custom wrappers for common types
-    var wrapper = wrappers[fullName];
-    if (wrapper) {
-        var originalThis = Object.create(this);
-        // if (wrapper.fromObject) {
-            originalThis.fromObject = this.fromObject;
-            this.fromObject = wrapper.fromObject.bind(originalThis);
-        // }
-        // if (wrapper.toObject) {
-            originalThis.toObject = this.toObject;
-            this.toObject = wrapper.toObject.bind(originalThis);
-        // }
-    }
-
-    return this;
-};
-
-/**
- * Encodes a message of this type. Does not implicitly {@link Type#verify|verify} messages.
- * @param {Message<{}>|Object.<string,*>} message Message instance or plain object
- * @param {Writer} [writer] Writer to encode to
- * @returns {Writer} writer
- */
-Type.prototype.encode = function encode_setup(message, writer) {
-    return this.setup().encode(message, writer); // overrides this method
-};
-
-/**
- * Encodes a message of this type preceeded by its byte length as a varint. Does not implicitly {@link Type#verify|verify} messages.
- * @param {Message<{}>|Object.<string,*>} message Message instance or plain object
- * @param {Writer} [writer] Writer to encode to
- * @returns {Writer} writer
- */
-Type.prototype.encodeDelimited = function encodeDelimited(message, writer) {
-    return this.encode(message, writer && writer.len ? writer.fork() : writer).ldelim();
-};
-
-/**
- * Decodes a message of this type.
- * @param {Reader|Uint8Array} reader Reader or buffer to decode from
- * @param {number} [length] Length of the message, if known beforehand
- * @returns {Message<{}>} Decoded message
- * @throws {Error} If the payload is not a reader or valid buffer
- * @throws {util.ProtocolError<{}>} If required fields are missing
- */
-Type.prototype.decode = function decode_setup(reader, length) {
-    return this.setup().decode(reader, length); // overrides this method
-};
-
-/**
- * Decodes a message of this type preceeded by its byte length as a varint.
- * @param {Reader|Uint8Array} reader Reader or buffer to decode from
- * @returns {Message<{}>} Decoded message
- * @throws {Error} If the payload is not a reader or valid buffer
- * @throws {util.ProtocolError} If required fields are missing
- */
-Type.prototype.decodeDelimited = function decodeDelimited(reader) {
-    if (!(reader instanceof Reader))
-        reader = Reader.create(reader);
-    return this.decode(reader, reader.uint32());
-};
-
-/**
- * Verifies that field values are valid and that required fields are present.
- * @param {Object.<string,*>} message Plain object to verify
- * @returns {null|string} `null` if valid, otherwise the reason why it is not
- */
-Type.prototype.verify = function verify_setup(message) {
-    return this.setup().verify(message); // overrides this method
-};
-
-/**
- * Creates a new message of this type from a plain object. Also converts values to their respective internal types.
- * @param {Object.<string,*>} object Plain object to convert
- * @returns {Message<{}>} Message instance
- */
-Type.prototype.fromObject = function fromObject(object) {
-    return this.setup().fromObject(object);
-};
-
-/**
- * Conversion options as used by {@link Type#toObject} and {@link Message.toObject}.
- * @interface IConversionOptions
- * @property {Function} [longs] Long conversion type.
- * Valid values are `String` and `Number` (the global types).
- * Defaults to copy the present value, which is a possibly unsafe number without and a {@link Long} with a long library.
- * @property {Function} [enums] Enum value conversion type.
- * Only valid value is `String` (the global type).
- * Defaults to copy the present value, which is the numeric id.
- * @property {Function} [bytes] Bytes value conversion type.
- * Valid values are `Array` and (a base64 encoded) `String` (the global types).
- * Defaults to copy the present value, which usually is a Buffer under node and an Uint8Array in the browser.
- * @property {boolean} [defaults=false] Also sets default values on the resulting object
- * @property {boolean} [arrays=false] Sets empty arrays for missing repeated fields even if `defaults=false`
- * @property {boolean} [objects=false] Sets empty objects for missing map fields even if `defaults=false`
- * @property {boolean} [oneofs=false] Includes virtual oneof properties set to the present field's name, if any
- * @property {boolean} [json=false] Performs additional JSON compatibility conversions, i.e. NaN and Infinity to strings
- */
-
-/**
- * Creates a plain object from a message of this type. Also converts values to other types if specified.
- * @param {Message<{}>} message Message instance
- * @param {IConversionOptions} [options] Conversion options
- * @returns {Object.<string,*>} Plain object
- */
-Type.prototype.toObject = function toObject(message, options) {
-    return this.setup().toObject(message, options);
-};
-
-/**
- * Decorator function as returned by {@link Type.d} (TypeScript).
- * @typedef TypeDecorator
- * @type {function}
- * @param {Constructor<T>} target Target constructor
- * @returns {undefined}
- * @template T extends Message<T>
- */
-
-/**
- * Type decorator (TypeScript).
- * @param {string} [typeName] Type name, defaults to the constructor's name
- * @returns {TypeDecorator<T>} Decorator function
- * @template T extends Message<T>
- */
-Type.d = function decorateType(typeName) {
-    return function typeDecorator(target) {
-        util.decorateType(target, typeName);
-    };
-};
-
-
-/***/ }),
-/* 55 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = MapField;
-
-// extends Field
-var Field = __webpack_require__(14);
-((MapField.prototype = Object.create(Field.prototype)).constructor = MapField).className = "MapField";
-
-var types   = __webpack_require__(16),
-    util    = __webpack_require__(9);
-
-/**
- * Constructs a new map field instance.
- * @classdesc Reflected map field.
- * @extends FieldBase
- * @constructor
- * @param {string} name Unique name within its namespace
- * @param {number} id Unique id within its namespace
- * @param {string} keyType Key type
- * @param {string} type Value type
- * @param {Object.<string,*>} [options] Declared options
- * @param {string} [comment] Comment associated with this field
- */
-function MapField(name, id, keyType, type, options, comment) {
-    Field.call(this, name, id, type, undefined, undefined, options, comment);
-
-    /* istanbul ignore if */
-    if (!util.isString(keyType))
-        throw TypeError("keyType must be a string");
-
-    /**
-     * Key type.
-     * @type {string}
-     */
-    this.keyType = keyType; // toJSON, marker
-
-    /**
-     * Resolved key type if not a basic type.
-     * @type {ReflectionObject|null}
-     */
-    this.resolvedKeyType = null;
-
-    // Overrides Field#map
-    this.map = true;
-}
-
-/**
- * Map field descriptor.
- * @interface IMapField
- * @extends {IField}
- * @property {string} keyType Key type
- */
-
-/**
- * Extension map field descriptor.
- * @interface IExtensionMapField
- * @extends IMapField
- * @property {string} extend Extended type
- */
-
-/**
- * Constructs a map field from a map field descriptor.
- * @param {string} name Field name
- * @param {IMapField} json Map field descriptor
- * @returns {MapField} Created map field
- * @throws {TypeError} If arguments are invalid
- */
-MapField.fromJSON = function fromJSON(name, json) {
-    return new MapField(name, json.id, json.keyType, json.type, json.options, json.comment);
-};
-
-/**
- * Converts this map field to a map field descriptor.
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {IMapField} Map field descriptor
- */
-MapField.prototype.toJSON = function toJSON(toJSONOptions) {
-    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
-    return util.toObject([
-        "keyType" , this.keyType,
-        "type"    , this.type,
-        "id"      , this.id,
-        "extend"  , this.extend,
-        "options" , this.options,
-        "comment" , keepComments ? this.comment : undefined
-    ]);
-};
-
-/**
- * @override
- */
-MapField.prototype.resolve = function resolve() {
-    if (this.resolved)
-        return this;
-
-    // Besides a value type, map fields have a key type that may be "any scalar type except for floating point types and bytes"
-    if (types.mapKey[this.keyType] === undefined)
-        throw Error("invalid key type: " + this.keyType);
-
-    return Field.prototype.resolve.call(this);
-};
-
-/**
- * Map field decorator (TypeScript).
- * @name MapField.d
- * @function
- * @param {number} fieldId Field id
- * @param {"int32"|"uint32"|"sint32"|"fixed32"|"sfixed32"|"int64"|"uint64"|"sint64"|"fixed64"|"sfixed64"|"bool"|"string"} fieldKeyType Field key type
- * @param {"double"|"float"|"int32"|"uint32"|"sint32"|"fixed32"|"sfixed32"|"int64"|"uint64"|"sint64"|"fixed64"|"sfixed64"|"bool"|"string"|"bytes"|Object|Constructor<{}>} fieldValueType Field value type
- * @returns {FieldDecorator} Decorator function
- * @template T extends { [key: string]: number | Long | string | boolean | Uint8Array | Buffer | number[] | Message<{}> }
- */
-MapField.d = function decorateMapField(fieldId, fieldKeyType, fieldValueType) {
-
-    // submessage value: decorate the submessage and use its name as the type
-    if (typeof fieldValueType === "function")
-        fieldValueType = util.decorateType(fieldValueType).name;
-
-    // enum reference value: create a reflected copy of the enum and keep reuseing it
-    else if (fieldValueType && typeof fieldValueType === "object")
-        fieldValueType = util.decorateEnum(fieldValueType).name;
-
-    return function mapFieldDecorator(prototype, fieldName) {
-        util.decorateType(prototype.constructor)
-            .add(new MapField(fieldName, fieldId, fieldKeyType, fieldValueType));
-    };
-};
-
-
-/***/ }),
-/* 56 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Service;
-
-// extends Namespace
-var Namespace = __webpack_require__(17);
-((Service.prototype = Object.create(Namespace.prototype)).constructor = Service).className = "Service";
-
-var Method = __webpack_require__(57),
-    util   = __webpack_require__(9),
-    rpc    = __webpack_require__(62);
-
-/**
- * Constructs a new service instance.
- * @classdesc Reflected service.
- * @extends NamespaceBase
- * @constructor
- * @param {string} name Service name
- * @param {Object.<string,*>} [options] Service options
- * @throws {TypeError} If arguments are invalid
- */
-function Service(name, options) {
-    Namespace.call(this, name, options);
-
-    /**
-     * Service methods.
-     * @type {Object.<string,Method>}
-     */
-    this.methods = {}; // toJSON, marker
-
-    /**
-     * Cached methods as an array.
-     * @type {Method[]|null}
-     * @private
-     */
-    this._methodsArray = null;
-}
-
-/**
- * Service descriptor.
- * @interface IService
- * @extends INamespace
- * @property {Object.<string,IMethod>} methods Method descriptors
- */
-
-/**
- * Constructs a service from a service descriptor.
- * @param {string} name Service name
- * @param {IService} json Service descriptor
- * @returns {Service} Created service
- * @throws {TypeError} If arguments are invalid
- */
-Service.fromJSON = function fromJSON(name, json) {
-    var service = new Service(name, json.options);
-    /* istanbul ignore else */
-    if (json.methods)
-        for (var names = Object.keys(json.methods), i = 0; i < names.length; ++i)
-            service.add(Method.fromJSON(names[i], json.methods[names[i]]));
-    if (json.nested)
-        service.addJSON(json.nested);
-    service.comment = json.comment;
-    return service;
-};
-
-/**
- * Converts this service to a service descriptor.
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {IService} Service descriptor
- */
-Service.prototype.toJSON = function toJSON(toJSONOptions) {
-    var inherited = Namespace.prototype.toJSON.call(this, toJSONOptions);
-    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
-    return util.toObject([
-        "options" , inherited && inherited.options || undefined,
-        "methods" , Namespace.arrayToJSON(this.methodsArray, toJSONOptions) || /* istanbul ignore next */ {},
-        "nested"  , inherited && inherited.nested || undefined,
-        "comment" , keepComments ? this.comment : undefined
-    ]);
-};
-
-/**
- * Methods of this service as an array for iteration.
- * @name Service#methodsArray
- * @type {Method[]}
- * @readonly
- */
-Object.defineProperty(Service.prototype, "methodsArray", {
-    get: function() {
-        return this._methodsArray || (this._methodsArray = util.toArray(this.methods));
-    }
-});
-
-function clearCache(service) {
-    service._methodsArray = null;
-    return service;
-}
-
-/**
- * @override
- */
-Service.prototype.get = function get(name) {
-    return this.methods[name]
-        || Namespace.prototype.get.call(this, name);
-};
-
-/**
- * @override
- */
-Service.prototype.resolveAll = function resolveAll() {
-    var methods = this.methodsArray;
-    for (var i = 0; i < methods.length; ++i)
-        methods[i].resolve();
-    return Namespace.prototype.resolve.call(this);
-};
-
-/**
- * @override
- */
-Service.prototype.add = function add(object) {
-
-    /* istanbul ignore if */
-    if (this.get(object.name))
-        throw Error("duplicate name '" + object.name + "' in " + this);
-
-    if (object instanceof Method) {
-        this.methods[object.name] = object;
-        object.parent = this;
-        return clearCache(this);
-    }
-    return Namespace.prototype.add.call(this, object);
-};
-
-/**
- * @override
- */
-Service.prototype.remove = function remove(object) {
-    if (object instanceof Method) {
-
-        /* istanbul ignore if */
-        if (this.methods[object.name] !== object)
-            throw Error(object + " is not a member of " + this);
-
-        delete this.methods[object.name];
-        object.parent = null;
-        return clearCache(this);
-    }
-    return Namespace.prototype.remove.call(this, object);
-};
-
-/**
- * Creates a runtime service using the specified rpc implementation.
- * @param {RPCImpl} rpcImpl RPC implementation
- * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
- * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
- * @returns {rpc.Service} RPC service. Useful where requests and/or responses are streamed.
- */
-Service.prototype.create = function create(rpcImpl, requestDelimited, responseDelimited) {
-    var rpcService = new rpc.Service(rpcImpl, requestDelimited, responseDelimited);
-    for (var i = 0, method; i < /* initializes */ this.methodsArray.length; ++i) {
-        var methodName = util.lcFirst((method = this._methodsArray[i]).resolve().name).replace(/[^$\w_]/g, "");
-        rpcService[methodName] = util.codegen(["r","c"], util.isReserved(methodName) ? methodName + "_" : methodName)("return this.rpcCall(m,q,s,r,c)")({
-            m: method,
-            q: method.resolvedRequestType.ctor,
-            s: method.resolvedResponseType.ctor
-        });
-    }
-    return rpcService;
-};
-
-
-/***/ }),
-/* 57 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Method;
-
-// extends ReflectionObject
-var ReflectionObject = __webpack_require__(15);
-((Method.prototype = Object.create(ReflectionObject.prototype)).constructor = Method).className = "Method";
-
-var util = __webpack_require__(9);
-
-/**
- * Constructs a new service method instance.
- * @classdesc Reflected service method.
- * @extends ReflectionObject
- * @constructor
- * @param {string} name Method name
- * @param {string|undefined} type Method type, usually `"rpc"`
- * @param {string} requestType Request message type
- * @param {string} responseType Response message type
- * @param {boolean|Object.<string,*>} [requestStream] Whether the request is streamed
- * @param {boolean|Object.<string,*>} [responseStream] Whether the response is streamed
- * @param {Object.<string,*>} [options] Declared options
- * @param {string} [comment] The comment for this method
- */
-function Method(name, type, requestType, responseType, requestStream, responseStream, options, comment) {
-
-    /* istanbul ignore next */
-    if (util.isObject(requestStream)) {
-        options = requestStream;
-        requestStream = responseStream = undefined;
-    } else if (util.isObject(responseStream)) {
-        options = responseStream;
-        responseStream = undefined;
-    }
-
-    /* istanbul ignore if */
-    if (!(type === undefined || util.isString(type)))
-        throw TypeError("type must be a string");
-
-    /* istanbul ignore if */
-    if (!util.isString(requestType))
-        throw TypeError("requestType must be a string");
-
-    /* istanbul ignore if */
-    if (!util.isString(responseType))
-        throw TypeError("responseType must be a string");
-
-    ReflectionObject.call(this, name, options);
-
-    /**
-     * Method type.
-     * @type {string}
-     */
-    this.type = type || "rpc"; // toJSON
-
-    /**
-     * Request type.
-     * @type {string}
-     */
-    this.requestType = requestType; // toJSON, marker
-
-    /**
-     * Whether requests are streamed or not.
-     * @type {boolean|undefined}
-     */
-    this.requestStream = requestStream ? true : undefined; // toJSON
-
-    /**
-     * Response type.
-     * @type {string}
-     */
-    this.responseType = responseType; // toJSON
-
-    /**
-     * Whether responses are streamed or not.
-     * @type {boolean|undefined}
-     */
-    this.responseStream = responseStream ? true : undefined; // toJSON
-
-    /**
-     * Resolved request type.
-     * @type {Type|null}
-     */
-    this.resolvedRequestType = null;
-
-    /**
-     * Resolved response type.
-     * @type {Type|null}
-     */
-    this.resolvedResponseType = null;
-
-    /**
-     * Comment for this method
-     * @type {string|null}
-     */
-    this.comment = comment;
-}
-
-/**
- * Method descriptor.
- * @interface IMethod
- * @property {string} [type="rpc"] Method type
- * @property {string} requestType Request type
- * @property {string} responseType Response type
- * @property {boolean} [requestStream=false] Whether requests are streamed
- * @property {boolean} [responseStream=false] Whether responses are streamed
- * @property {Object.<string,*>} [options] Method options
- */
-
-/**
- * Constructs a method from a method descriptor.
- * @param {string} name Method name
- * @param {IMethod} json Method descriptor
- * @returns {Method} Created method
- * @throws {TypeError} If arguments are invalid
- */
-Method.fromJSON = function fromJSON(name, json) {
-    return new Method(name, json.type, json.requestType, json.responseType, json.requestStream, json.responseStream, json.options, json.comment);
-};
-
-/**
- * Converts this method to a method descriptor.
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {IMethod} Method descriptor
- */
-Method.prototype.toJSON = function toJSON(toJSONOptions) {
-    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
-    return util.toObject([
-        "type"           , this.type !== "rpc" && /* istanbul ignore next */ this.type || undefined,
-        "requestType"    , this.requestType,
-        "requestStream"  , this.requestStream,
-        "responseType"   , this.responseType,
-        "responseStream" , this.responseStream,
-        "options"        , this.options,
-        "comment"        , keepComments ? this.comment : undefined
-    ]);
-};
-
-/**
- * @override
- */
-Method.prototype.resolve = function resolve() {
-
-    /* istanbul ignore if */
-    if (this.resolved)
-        return this;
-
-    this.resolvedRequestType = this.parent.lookupType(this.requestType);
-    this.resolvedResponseType = this.parent.lookupType(this.responseType);
-
-    return ReflectionObject.prototype.resolve.call(this);
-};
-
-
-/***/ }),
-/* 58 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Message;
-
-var util = __webpack_require__(13);
-
-/**
- * Constructs a new message instance.
- * @classdesc Abstract runtime message.
- * @constructor
- * @param {Properties<T>} [properties] Properties to set
- * @template T extends object = object
- */
-function Message(properties) {
-    // not used internally
-    if (properties)
-        for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-            this[keys[i]] = properties[keys[i]];
-}
-
-/**
- * Reference to the reflected type.
- * @name Message.$type
- * @type {Type}
- * @readonly
- */
-
-/**
- * Reference to the reflected type.
- * @name Message#$type
- * @type {Type}
- * @readonly
- */
-
-/*eslint-disable valid-jsdoc*/
-
-/**
- * Creates a new message of this type using the specified properties.
- * @param {Object.<string,*>} [properties] Properties to set
- * @returns {Message<T>} Message instance
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.create = function create(properties) {
-    return this.$type.create(properties);
-};
-
-/**
- * Encodes a message of this type.
- * @param {T|Object.<string,*>} message Message to encode
- * @param {Writer} [writer] Writer to use
- * @returns {Writer} Writer
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.encode = function encode(message, writer) {
-    return this.$type.encode(message, writer);
-};
-
-/**
- * Encodes a message of this type preceeded by its length as a varint.
- * @param {T|Object.<string,*>} message Message to encode
- * @param {Writer} [writer] Writer to use
- * @returns {Writer} Writer
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.encodeDelimited = function encodeDelimited(message, writer) {
-    return this.$type.encodeDelimited(message, writer);
-};
-
-/**
- * Decodes a message of this type.
- * @name Message.decode
- * @function
- * @param {Reader|Uint8Array} reader Reader or buffer to decode
- * @returns {T} Decoded message
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.decode = function decode(reader) {
-    return this.$type.decode(reader);
-};
-
-/**
- * Decodes a message of this type preceeded by its length as a varint.
- * @name Message.decodeDelimited
- * @function
- * @param {Reader|Uint8Array} reader Reader or buffer to decode
- * @returns {T} Decoded message
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.decodeDelimited = function decodeDelimited(reader) {
-    return this.$type.decodeDelimited(reader);
-};
-
-/**
- * Verifies a message of this type.
- * @name Message.verify
- * @function
- * @param {Object.<string,*>} message Plain object to verify
- * @returns {string|null} `null` if valid, otherwise the reason why it is not
- */
-Message.verify = function verify(message) {
-    return this.$type.verify(message);
-};
-
-/**
- * Creates a new message of this type from a plain object. Also converts values to their respective internal types.
- * @param {Object.<string,*>} object Plain object
- * @returns {T} Message instance
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.fromObject = function fromObject(object) {
-    return this.$type.fromObject(object);
-};
-
-/**
- * Creates a plain object from a message of this type. Also converts values to other types if specified.
- * @param {T} message Message instance
- * @param {IConversionOptions} [options] Conversion options
- * @returns {Object.<string,*>} Plain object
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.toObject = function toObject(message, options) {
-    return this.$type.toObject(message, options);
-};
-
-/**
- * Converts this message to JSON.
- * @returns {Object.<string,*>} JSON object
- */
-Message.prototype.toJSON = function toJSON() {
-    return this.$type.toObject(this, util.toJSONOptions);
-};
-
-/*eslint-enable valid-jsdoc*/
-
-/***/ }),
-/* 59 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Root;
-
-// extends Namespace
-var Namespace = __webpack_require__(17);
-((Root.prototype = Object.create(Namespace.prototype)).constructor = Root).className = "Root";
-
-var Field   = __webpack_require__(14),
-    Enum    = __webpack_require__(12),
-    OneOf   = __webpack_require__(21),
-    util    = __webpack_require__(9);
-
-var Type,   // cyclic
-    parse,  // might be excluded
-    common; // "
-
-/**
- * Constructs a new root namespace instance.
- * @classdesc Root namespace wrapping all types, enums, services, sub-namespaces etc. that belong together.
- * @extends NamespaceBase
- * @constructor
- * @param {Object.<string,*>} [options] Top level options
- */
-function Root(options) {
-    Namespace.call(this, "", options);
-
-    /**
-     * Deferred extension fields.
-     * @type {Field[]}
-     */
-    this.deferred = [];
-
-    /**
-     * Resolved file names of loaded files.
-     * @type {string[]}
-     */
-    this.files = [];
-}
-
-/**
- * Loads a namespace descriptor into a root namespace.
- * @param {INamespace} json Nameespace descriptor
- * @param {Root} [root] Root namespace, defaults to create a new one if omitted
- * @returns {Root} Root namespace
- */
-Root.fromJSON = function fromJSON(json, root) {
-    if (!root)
-        root = new Root();
-    if (json.options)
-        root.setOptions(json.options);
-    return root.addJSON(json.nested);
-};
-
-/**
- * Resolves the path of an imported file, relative to the importing origin.
- * This method exists so you can override it with your own logic in case your imports are scattered over multiple directories.
- * @function
- * @param {string} origin The file name of the importing file
- * @param {string} target The file name being imported
- * @returns {string|null} Resolved path to `target` or `null` to skip the file
- */
-Root.prototype.resolvePath = util.path.resolve;
-
-// A symbol-like function to safely signal synchronous loading
-/* istanbul ignore next */
-function SYNC() {} // eslint-disable-line no-empty-function
-
-/**
- * Loads one or multiple .proto or preprocessed .json files into this root namespace and calls the callback.
- * @param {string|string[]} filename Names of one or multiple files to load
- * @param {IParseOptions} options Parse options
- * @param {LoadCallback} callback Callback function
- * @returns {undefined}
- */
-Root.prototype.load = function load(filename, options, callback) {
-    if (typeof options === "function") {
-        callback = options;
-        options = undefined;
-    }
-    var self = this;
-    if (!callback)
-        return util.asPromise(load, self, filename, options);
-
-    var sync = callback === SYNC; // undocumented
-
-    // Finishes loading by calling the callback (exactly once)
-    function finish(err, root) {
-        /* istanbul ignore if */
-        if (!callback)
-            return;
-        var cb = callback;
-        callback = null;
-        if (sync)
-            throw err;
-        cb(err, root);
-    }
-
-    // Processes a single file
-    function process(filename, source) {
-        try {
-            if (util.isString(source) && source.charAt(0) === "{")
-                source = JSON.parse(source);
-            if (!util.isString(source))
-                self.setOptions(source.options).addJSON(source.nested);
-            else {
-                parse.filename = filename;
-                var parsed = parse(source, self, options),
-                    resolved,
-                    i = 0;
-                if (parsed.imports)
-                    for (; i < parsed.imports.length; ++i)
-                        if (resolved = self.resolvePath(filename, parsed.imports[i]))
-                            fetch(resolved);
-                if (parsed.weakImports)
-                    for (i = 0; i < parsed.weakImports.length; ++i)
-                        if (resolved = self.resolvePath(filename, parsed.weakImports[i]))
-                            fetch(resolved, true);
-            }
-        } catch (err) {
-            finish(err);
-        }
-        if (!sync && !queued)
-            finish(null, self); // only once anyway
-    }
-
-    // Fetches a single file
-    function fetch(filename, weak) {
-
-        // Strip path if this file references a bundled definition
-        var idx = filename.lastIndexOf("google/protobuf/");
-        if (idx > -1) {
-            var altname = filename.substring(idx);
-            if (altname in common)
-                filename = altname;
-        }
-
-        // Skip if already loaded / attempted
-        if (self.files.indexOf(filename) > -1)
-            return;
-        self.files.push(filename);
-
-        // Shortcut bundled definitions
-        if (filename in common) {
-            if (sync)
-                process(filename, common[filename]);
-            else {
-                ++queued;
-                setTimeout(function() {
-                    --queued;
-                    process(filename, common[filename]);
-                });
-            }
-            return;
-        }
-
-        // Otherwise fetch from disk or network
-        if (sync) {
-            var source;
-            try {
-                source = util.fs.readFileSync(filename).toString("utf8");
-            } catch (err) {
-                if (!weak)
-                    finish(err);
-                return;
-            }
-            process(filename, source);
-        } else {
-            ++queued;
-            util.fetch(filename, function(err, source) {
-                --queued;
-                /* istanbul ignore if */
-                if (!callback)
-                    return; // terminated meanwhile
-                if (err) {
-                    /* istanbul ignore else */
-                    if (!weak)
-                        finish(err);
-                    else if (!queued) // can't be covered reliably
-                        finish(null, self);
-                    return;
-                }
-                process(filename, source);
-            });
-        }
-    }
-    var queued = 0;
-
-    // Assembling the root namespace doesn't require working type
-    // references anymore, so we can load everything in parallel
-    if (util.isString(filename))
-        filename = [ filename ];
-    for (var i = 0, resolved; i < filename.length; ++i)
-        if (resolved = self.resolvePath("", filename[i]))
-            fetch(resolved);
-
-    if (sync)
-        return self;
-    if (!queued)
-        finish(null, self);
-    return undefined;
-};
-// function load(filename:string, options:IParseOptions, callback:LoadCallback):undefined
-
-/**
- * Loads one or multiple .proto or preprocessed .json files into this root namespace and calls the callback.
- * @function Root#load
- * @param {string|string[]} filename Names of one or multiple files to load
- * @param {LoadCallback} callback Callback function
- * @returns {undefined}
- * @variation 2
- */
-// function load(filename:string, callback:LoadCallback):undefined
-
-/**
- * Loads one or multiple .proto or preprocessed .json files into this root namespace and returns a promise.
- * @function Root#load
- * @param {string|string[]} filename Names of one or multiple files to load
- * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
- * @returns {Promise<Root>} Promise
- * @variation 3
- */
-// function load(filename:string, [options:IParseOptions]):Promise<Root>
-
-/**
- * Synchronously loads one or multiple .proto or preprocessed .json files into this root namespace (node only).
- * @function Root#loadSync
- * @param {string|string[]} filename Names of one or multiple files to load
- * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
- * @returns {Root} Root namespace
- * @throws {Error} If synchronous fetching is not supported (i.e. in browsers) or if a file's syntax is invalid
- */
-Root.prototype.loadSync = function loadSync(filename, options) {
-    if (!util.isNode)
-        throw Error("not supported");
-    return this.load(filename, options, SYNC);
-};
-
-/**
- * @override
- */
-Root.prototype.resolveAll = function resolveAll() {
-    if (this.deferred.length)
-        throw Error("unresolvable extensions: " + this.deferred.map(function(field) {
-            return "'extend " + field.extend + "' in " + field.parent.fullName;
-        }).join(", "));
-    return Namespace.prototype.resolveAll.call(this);
-};
-
-// only uppercased (and thus conflict-free) children are exposed, see below
-var exposeRe = /^[A-Z]/;
-
-/**
- * Handles a deferred declaring extension field by creating a sister field to represent it within its extended type.
- * @param {Root} root Root instance
- * @param {Field} field Declaring extension field witin the declaring type
- * @returns {boolean} `true` if successfully added to the extended type, `false` otherwise
- * @inner
- * @ignore
- */
-function tryHandleExtension(root, field) {
-    var extendedType = field.parent.lookup(field.extend);
-    if (extendedType) {
-        var sisterField = new Field(field.fullName, field.id, field.type, field.rule, undefined, field.options);
-        sisterField.declaringField = field;
-        field.extensionField = sisterField;
-        extendedType.add(sisterField);
-        return true;
-    }
-    return false;
-}
-
-/**
- * Called when any object is added to this root or its sub-namespaces.
- * @param {ReflectionObject} object Object added
- * @returns {undefined}
- * @private
- */
-Root.prototype._handleAdd = function _handleAdd(object) {
-    if (object instanceof Field) {
-
-        if (/* an extension field (implies not part of a oneof) */ object.extend !== undefined && /* not already handled */ !object.extensionField)
-            if (!tryHandleExtension(this, object))
-                this.deferred.push(object);
-
-    } else if (object instanceof Enum) {
-
-        if (exposeRe.test(object.name))
-            object.parent[object.name] = object.values; // expose enum values as property of its parent
-
-    } else if (!(object instanceof OneOf)) /* everything else is a namespace */ {
-
-        if (object instanceof Type) // Try to handle any deferred extensions
-            for (var i = 0; i < this.deferred.length;)
-                if (tryHandleExtension(this, this.deferred[i]))
-                    this.deferred.splice(i, 1);
-                else
-                    ++i;
-        for (var j = 0; j < /* initializes */ object.nestedArray.length; ++j) // recurse into the namespace
-            this._handleAdd(object._nestedArray[j]);
-        if (exposeRe.test(object.name))
-            object.parent[object.name] = object; // expose namespace as property of its parent
-    }
-
-    // The above also adds uppercased (and thus conflict-free) nested types, services and enums as
-    // properties of namespaces just like static code does. This allows using a .d.ts generated for
-    // a static module with reflection-based solutions where the condition is met.
-};
-
-/**
- * Called when any object is removed from this root or its sub-namespaces.
- * @param {ReflectionObject} object Object removed
- * @returns {undefined}
- * @private
- */
-Root.prototype._handleRemove = function _handleRemove(object) {
-    if (object instanceof Field) {
-
-        if (/* an extension field */ object.extend !== undefined) {
-            if (/* already handled */ object.extensionField) { // remove its sister field
-                object.extensionField.parent.remove(object.extensionField);
-                object.extensionField = null;
-            } else { // cancel the extension
-                var index = this.deferred.indexOf(object);
-                /* istanbul ignore else */
-                if (index > -1)
-                    this.deferred.splice(index, 1);
-            }
-        }
-
-    } else if (object instanceof Enum) {
-
-        if (exposeRe.test(object.name))
-            delete object.parent[object.name]; // unexpose enum values
-
-    } else if (object instanceof Namespace) {
-
-        for (var i = 0; i < /* initializes */ object.nestedArray.length; ++i) // recurse into the namespace
-            this._handleRemove(object._nestedArray[i]);
-
-        if (exposeRe.test(object.name))
-            delete object.parent[object.name]; // unexpose namespaces
-
-    }
-};
-
-// Sets up cyclic dependencies (called in index-light)
-Root._configure = function(Type_, parse_, common_) {
-    Type   = Type_;
-    parse  = parse_;
-    common = common_;
-};
-
-
-/***/ }),
-/* 60 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = asPromise;
-
-/**
- * Callback as used by {@link util.asPromise}.
- * @typedef asPromiseCallback
- * @type {function}
- * @param {Error|null} error Error, if any
- * @param {...*} params Additional arguments
- * @returns {undefined}
- */
-
-/**
- * Returns a promise from a node-style callback function.
- * @memberof util
- * @param {asPromiseCallback} fn Function to call
- * @param {*} ctx Function context
- * @param {...*} params Function arguments
- * @returns {Promise<*>} Promisified function
- */
-function asPromise(fn, ctx/*, varargs */) {
-    var params  = new Array(arguments.length - 1),
-        offset  = 0,
-        index   = 2,
-        pending = true;
-    while (index < arguments.length)
-        params[offset++] = arguments[index++];
-    return new Promise(function executor(resolve, reject) {
-        params[offset] = function callback(err/*, varargs */) {
-            if (pending) {
-                pending = false;
-                if (err)
-                    reject(err);
-                else {
-                    var params = new Array(arguments.length - 1),
-                        offset = 0;
-                    while (offset < params.length)
-                        params[offset++] = arguments[offset];
-                    resolve.apply(null, params);
-                }
-            }
-        };
-        try {
-            fn.apply(ctx || null, params);
-        } catch (err) {
-            if (pending) {
-                pending = false;
-                reject(err);
-            }
-        }
-    });
-}
-
-
-/***/ }),
-/* 61 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = inquire;
-
-/**
- * Requires a module only if available.
- * @memberof util
- * @param {string} moduleName Module to require
- * @returns {?Object} Required module if available and not empty, otherwise `null`
- */
-function inquire(moduleName) {
-    try {
-        var mod = eval("quire".replace(/^/,"re"))(moduleName); // eslint-disable-line no-eval
-        if (mod && (mod.length || Object.keys(mod).length))
-            return mod;
-    } catch (e) {} // eslint-disable-line no-empty
-    return null;
-}
-
-
-/***/ }),
-/* 62 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-/**
- * Streaming RPC helpers.
- * @namespace
- */
-var rpc = exports;
-
-/**
- * RPC implementation passed to {@link Service#create} performing a service request on network level, i.e. by utilizing http requests or websockets.
- * @typedef RPCImpl
- * @type {function}
- * @param {Method|rpc.ServiceMethod<Message<{}>,Message<{}>>} method Reflected or static method being called
- * @param {Uint8Array} requestData Request data
- * @param {RPCImplCallback} callback Callback function
- * @returns {undefined}
- * @example
- * function rpcImpl(method, requestData, callback) {
- *     if (protobuf.util.lcFirst(method.name) !== "myMethod") // compatible with static code
- *         throw Error("no such method");
- *     asynchronouslyObtainAResponse(requestData, function(err, responseData) {
- *         callback(err, responseData);
- *     });
- * }
- */
-
-/**
- * Node-style callback as used by {@link RPCImpl}.
- * @typedef RPCImplCallback
- * @type {function}
- * @param {Error|null} error Error, if any, otherwise `null`
- * @param {Uint8Array|null} [response] Response data or `null` to signal end of stream, if there hasn't been an error
- * @returns {undefined}
- */
-
-rpc.Service = __webpack_require__(83);
-
-
-/***/ }),
-/* 63 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = {};
-
-/**
- * Named roots.
- * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
- * Can also be used manually to make roots available accross modules.
- * @name roots
- * @type {Object.<string,Root>}
- * @example
- * // pbjs -r myroot -o compiled.js ...
- *
- * // in another module:
- * require("./compiled.js");
- *
- * // in any subsequent module:
- * var root = protobuf.roots["myroot"];
- */
-
-
-/***/ }),
-/* 64 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = encoder;
-
-var Enum     = __webpack_require__(12),
-    types    = __webpack_require__(16),
-    util     = __webpack_require__(9);
-
-/**
- * Generates a partial message type encoder.
- * @param {Codegen} gen Codegen instance
- * @param {Field} field Reflected field
- * @param {number} fieldIndex Field index
- * @param {string} ref Variable reference
- * @returns {Codegen} Codegen instance
- * @ignore
- */
-function genTypePartial(gen, field, fieldIndex, ref) {
-    return field.resolvedType.group
-        ? gen("types[%i].encode(%s,w.uint32(%i)).uint32(%i)", fieldIndex, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0)
-        : gen("types[%i].encode(%s,w.uint32(%i).fork()).ldelim()", fieldIndex, ref, (field.id << 3 | 2) >>> 0);
-}
-
-/**
- * Generates an encoder specific to the specified message type.
- * @param {Type} mtype Message type
- * @returns {Codegen} Codegen instance
- */
-function encoder(mtype) {
-    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
-    var gen = util.codegen(["m", "w"], mtype.name + "$encode")
-    ("if(!w)")
-        ("w=Writer.create()");
-
-    var i, ref;
-
-    // "when a message is serialized its known fields should be written sequentially by field number"
-    var fields = /* initializes */ mtype.fieldsArray.slice().sort(util.compareFieldsById);
-
-    for (var i = 0; i < fields.length; ++i) {
-        var field    = fields[i].resolve(),
-            index    = mtype._fieldsArray.indexOf(field),
-            type     = field.resolvedType instanceof Enum ? "int32" : field.type,
-            wireType = types.basic[type];
-            ref      = "m" + util.safeProp(field.name);
-
-        // Map fields
-        if (field.map) {
-            gen
-    ("if(%s!=null&&m.hasOwnProperty(%j)){", ref, field.name) // !== undefined && !== null
-        ("for(var ks=Object.keys(%s),i=0;i<ks.length;++i){", ref)
-            ("w.uint32(%i).fork().uint32(%i).%s(ks[i])", (field.id << 3 | 2) >>> 0, 8 | types.mapKey[field.keyType], field.keyType);
-            if (wireType === undefined) gen
-            ("types[%i].encode(%s[ks[i]],w.uint32(18).fork()).ldelim().ldelim()", index, ref); // can't be groups
-            else gen
-            (".uint32(%i).%s(%s[ks[i]]).ldelim()", 16 | wireType, type, ref);
-            gen
-        ("}")
-    ("}");
-
-            // Repeated fields
-        } else if (field.repeated) { gen
-    ("if(%s!=null&&%s.length){", ref, ref); // !== undefined && !== null
-
-            // Packed repeated
-            if (field.packed && types.packed[type] !== undefined) { gen
-
-        ("w.uint32(%i).fork()", (field.id << 3 | 2) >>> 0)
-        ("for(var i=0;i<%s.length;++i)", ref)
-            ("w.%s(%s[i])", type, ref)
-        ("w.ldelim()");
-
-            // Non-packed
-            } else { gen
-
-        ("for(var i=0;i<%s.length;++i)", ref);
-                if (wireType === undefined)
-            genTypePartial(gen, field, index, ref + "[i]");
-                else gen
-            ("w.uint32(%i).%s(%s[i])", (field.id << 3 | wireType) >>> 0, type, ref);
-
-            } gen
-    ("}");
-
-        // Non-repeated
-        } else {
-            if (field.optional) gen
-    ("if(%s!=null&&m.hasOwnProperty(%j))", ref, field.name); // !== undefined && !== null
-
-            if (wireType === undefined)
-        genTypePartial(gen, field, index, ref);
-            else gen
-        ("w.uint32(%i).%s(%s)", (field.id << 3 | wireType) >>> 0, type, ref);
-
-        }
-    }
-
-    return gen
-    ("return w");
-    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
-}
-
-/***/ }),
-/* 65 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = decoder;
-
-var Enum    = __webpack_require__(12),
-    types   = __webpack_require__(16),
-    util    = __webpack_require__(9);
-
-function missing(field) {
-    return "missing required '" + field.name + "'";
-}
-
-/**
- * Generates a decoder specific to the specified message type.
- * @param {Type} mtype Message type
- * @returns {Codegen} Codegen instance
- */
-function decoder(mtype) {
-    /* eslint-disable no-unexpected-multiline */
-    var gen = util.codegen(["r", "l"], mtype.name + "$decode")
-    ("if(!(r instanceof Reader))")
-        ("r=Reader.create(r)")
-    ("var c=l===undefined?r.len:r.pos+l,m=new this.ctor" + (mtype.fieldsArray.filter(function(field) { return field.map; }).length ? ",k" : ""))
-    ("while(r.pos<c){")
-        ("var t=r.uint32()");
-    if (mtype.group) gen
-        ("if((t&7)===4)")
-            ("break");
-    gen
-        ("switch(t>>>3){");
-
-    var i = 0;
-    for (; i < /* initializes */ mtype.fieldsArray.length; ++i) {
-        var field = mtype._fieldsArray[i].resolve(),
-            type  = field.resolvedType instanceof Enum ? "int32" : field.type,
-            ref   = "m" + util.safeProp(field.name); gen
-            ("case %i:", field.id);
-
-        // Map fields
-        if (field.map) { gen
-                ("r.skip().pos++") // assumes id 1 + key wireType
-                ("if(%s===util.emptyObject)", ref)
-                    ("%s={}", ref)
-                ("k=r.%s()", field.keyType)
-                ("r.pos++"); // assumes id 2 + value wireType
-            if (types.long[field.keyType] !== undefined) {
-                if (types.basic[type] === undefined) gen
-                ("%s[typeof k===\"object\"?util.longToHash(k):k]=types[%i].decode(r,r.uint32())", ref, i); // can't be groups
-                else gen
-                ("%s[typeof k===\"object\"?util.longToHash(k):k]=r.%s()", ref, type);
-            } else {
-                if (types.basic[type] === undefined) gen
-                ("%s[k]=types[%i].decode(r,r.uint32())", ref, i); // can't be groups
-                else gen
-                ("%s[k]=r.%s()", ref, type);
-            }
-
-        // Repeated fields
-        } else if (field.repeated) { gen
-
-                ("if(!(%s&&%s.length))", ref, ref)
-                    ("%s=[]", ref);
-
-            // Packable (always check for forward and backward compatiblity)
-            if (types.packed[type] !== undefined) gen
-                ("if((t&7)===2){")
-                    ("var c2=r.uint32()+r.pos")
-                    ("while(r.pos<c2)")
-                        ("%s.push(r.%s())", ref, type)
-                ("}else");
-
-            // Non-packed
-            if (types.basic[type] === undefined) gen(field.resolvedType.group
-                    ? "%s.push(types[%i].decode(r))"
-                    : "%s.push(types[%i].decode(r,r.uint32()))", ref, i);
-            else gen
-                    ("%s.push(r.%s())", ref, type);
-
-        // Non-repeated
-        } else if (types.basic[type] === undefined) gen(field.resolvedType.group
-                ? "%s=types[%i].decode(r)"
-                : "%s=types[%i].decode(r,r.uint32())", ref, i);
-        else gen
-                ("%s=r.%s()", ref, type);
-        gen
-                ("break");
-    // Unknown fields
-    } gen
-            ("default:")
-                ("r.skipType(t&7)")
-                ("break")
-
-        ("}")
-    ("}");
-
-    // Field presence
-    for (i = 0; i < mtype._fieldsArray.length; ++i) {
-        var rfield = mtype._fieldsArray[i];
-        if (rfield.required) gen
-    ("if(!m.hasOwnProperty(%j))", rfield.name)
-        ("throw util.ProtocolError(%j,{instance:m})", missing(rfield));
-    }
-
-    return gen
-    ("return m");
-    /* eslint-enable no-unexpected-multiline */
-}
-
-
-/***/ }),
-/* 66 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = verifier;
-
-var Enum      = __webpack_require__(12),
-    util      = __webpack_require__(9);
-
-function invalid(field, expected) {
-    return field.name + ": " + expected + (field.repeated && expected !== "array" ? "[]" : field.map && expected !== "object" ? "{k:"+field.keyType+"}" : "") + " expected";
-}
-
-/**
- * Generates a partial value verifier.
- * @param {Codegen} gen Codegen instance
- * @param {Field} field Reflected field
- * @param {number} fieldIndex Field index
- * @param {string} ref Variable reference
- * @returns {Codegen} Codegen instance
- * @ignore
- */
-function genVerifyValue(gen, field, fieldIndex, ref) {
-    /* eslint-disable no-unexpected-multiline */
-    if (field.resolvedType) {
-        if (field.resolvedType instanceof Enum) { gen
-            ("switch(%s){", ref)
-                ("default:")
-                    ("return%j", invalid(field, "enum value"));
-            for (var keys = Object.keys(field.resolvedType.values), j = 0; j < keys.length; ++j) gen
-                ("case %i:", field.resolvedType.values[keys[j]]);
-            gen
-                    ("break")
-            ("}");
-        } else {
-            gen
-            ("{")
-                ("var e=types[%i].verify(%s);", fieldIndex, ref)
-                ("if(e)")
-                    ("return%j+e", field.name + ".")
-            ("}");
-        }
-    } else {
-        switch (field.type) {
-            case "int32":
-            case "uint32":
-            case "sint32":
-            case "fixed32":
-            case "sfixed32": gen
-                ("if(!util.isInteger(%s))", ref)
-                    ("return%j", invalid(field, "integer"));
-                break;
-            case "int64":
-            case "uint64":
-            case "sint64":
-            case "fixed64":
-            case "sfixed64": gen
-                ("if(!util.isInteger(%s)&&!(%s&&util.isInteger(%s.low)&&util.isInteger(%s.high)))", ref, ref, ref, ref)
-                    ("return%j", invalid(field, "integer|Long"));
-                break;
-            case "float":
-            case "double": gen
-                ("if(typeof %s!==\"number\")", ref)
-                    ("return%j", invalid(field, "number"));
-                break;
-            case "bool": gen
-                ("if(typeof %s!==\"boolean\")", ref)
-                    ("return%j", invalid(field, "boolean"));
-                break;
-            case "string": gen
-                ("if(!util.isString(%s))", ref)
-                    ("return%j", invalid(field, "string"));
-                break;
-            case "bytes": gen
-                ("if(!(%s&&typeof %s.length===\"number\"||util.isString(%s)))", ref, ref, ref)
-                    ("return%j", invalid(field, "buffer"));
-                break;
-        }
-    }
-    return gen;
-    /* eslint-enable no-unexpected-multiline */
-}
-
-/**
- * Generates a partial key verifier.
- * @param {Codegen} gen Codegen instance
- * @param {Field} field Reflected field
- * @param {string} ref Variable reference
- * @returns {Codegen} Codegen instance
- * @ignore
- */
-function genVerifyKey(gen, field, ref) {
-    /* eslint-disable no-unexpected-multiline */
-    switch (field.keyType) {
-        case "int32":
-        case "uint32":
-        case "sint32":
-        case "fixed32":
-        case "sfixed32": gen
-            ("if(!util.key32Re.test(%s))", ref)
-                ("return%j", invalid(field, "integer key"));
-            break;
-        case "int64":
-        case "uint64":
-        case "sint64":
-        case "fixed64":
-        case "sfixed64": gen
-            ("if(!util.key64Re.test(%s))", ref) // see comment above: x is ok, d is not
-                ("return%j", invalid(field, "integer|Long key"));
-            break;
-        case "bool": gen
-            ("if(!util.key2Re.test(%s))", ref)
-                ("return%j", invalid(field, "boolean key"));
-            break;
-    }
-    return gen;
-    /* eslint-enable no-unexpected-multiline */
-}
-
-/**
- * Generates a verifier specific to the specified message type.
- * @param {Type} mtype Message type
- * @returns {Codegen} Codegen instance
- */
-function verifier(mtype) {
-    /* eslint-disable no-unexpected-multiline */
-
-    var gen = util.codegen(["m"], mtype.name + "$verify")
-    ("if(typeof m!==\"object\"||m===null)")
-        ("return%j", "object expected");
-    var oneofs = mtype.oneofsArray,
-        seenFirstField = {};
-    if (oneofs.length) gen
-    ("var p={}");
-
-    for (var i = 0; i < /* initializes */ mtype.fieldsArray.length; ++i) {
-        var field = mtype._fieldsArray[i].resolve(),
-            ref   = "m" + util.safeProp(field.name);
-
-        if (field.optional) gen
-        ("if(%s!=null&&m.hasOwnProperty(%j)){", ref, field.name); // !== undefined && !== null
-
-        // map fields
-        if (field.map) { gen
-            ("if(!util.isObject(%s))", ref)
-                ("return%j", invalid(field, "object"))
-            ("var k=Object.keys(%s)", ref)
-            ("for(var i=0;i<k.length;++i){");
-                genVerifyKey(gen, field, "k[i]");
-                genVerifyValue(gen, field, i, ref + "[k[i]]")
-            ("}");
-
-        // repeated fields
-        } else if (field.repeated) { gen
-            ("if(!Array.isArray(%s))", ref)
-                ("return%j", invalid(field, "array"))
-            ("for(var i=0;i<%s.length;++i){", ref);
-                genVerifyValue(gen, field, i, ref + "[i]")
-            ("}");
-
-        // required or present fields
-        } else {
-            if (field.partOf) {
-                var oneofProp = util.safeProp(field.partOf.name);
-                if (seenFirstField[field.partOf.name] === 1) gen
-            ("if(p%s===1)", oneofProp)
-                ("return%j", field.partOf.name + ": multiple values");
-                seenFirstField[field.partOf.name] = 1;
-                gen
-            ("p%s=1", oneofProp);
-            }
-            genVerifyValue(gen, field, i, ref);
-        }
-        if (field.optional) gen
-        ("}");
-    }
-    return gen
-    ("return null");
-    /* eslint-enable no-unexpected-multiline */
-}
-
-/***/ }),
-/* 67 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-/**
- * Runtime message from/to plain object converters.
- * @namespace
- */
-var converter = exports;
-
-var Enum = __webpack_require__(12),
-    util = __webpack_require__(9);
-
-/**
- * Generates a partial value fromObject conveter.
- * @param {Codegen} gen Codegen instance
- * @param {Field} field Reflected field
- * @param {number} fieldIndex Field index
- * @param {string} prop Property reference
- * @returns {Codegen} Codegen instance
- * @ignore
- */
-function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
-    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
-    if (field.resolvedType) {
-        if (field.resolvedType instanceof Enum) { gen
-            ("switch(d%s){", prop);
-            for (var values = field.resolvedType.values, keys = Object.keys(values), i = 0; i < keys.length; ++i) {
-                if (field.repeated && values[keys[i]] === field.typeDefault) gen
-                ("default:");
-                gen
-                ("case%j:", keys[i])
-                ("case %i:", values[keys[i]])
-                    ("m%s=%j", prop, values[keys[i]])
-                    ("break");
-            } gen
-            ("}");
-        } else gen
-            ("if(typeof d%s!==\"object\")", prop)
-                ("throw TypeError(%j)", field.fullName + ": object expected")
-            ("m%s=types[%i].fromObject(d%s)", prop, fieldIndex, prop);
-    } else {
-        var isUnsigned = false;
-        switch (field.type) {
-            case "double":
-            case "float": gen
-                ("m%s=Number(d%s)", prop, prop); // also catches "NaN", "Infinity"
-                break;
-            case "uint32":
-            case "fixed32": gen
-                ("m%s=d%s>>>0", prop, prop);
-                break;
-            case "int32":
-            case "sint32":
-            case "sfixed32": gen
-                ("m%s=d%s|0", prop, prop);
-                break;
-            case "uint64":
-                isUnsigned = true;
-                // eslint-disable-line no-fallthrough
-            case "int64":
-            case "sint64":
-            case "fixed64":
-            case "sfixed64": gen
-                ("if(util.Long)")
-                    ("(m%s=util.Long.fromValue(d%s)).unsigned=%j", prop, prop, isUnsigned)
-                ("else if(typeof d%s===\"string\")", prop)
-                    ("m%s=parseInt(d%s,10)", prop, prop)
-                ("else if(typeof d%s===\"number\")", prop)
-                    ("m%s=d%s", prop, prop)
-                ("else if(typeof d%s===\"object\")", prop)
-                    ("m%s=new util.LongBits(d%s.low>>>0,d%s.high>>>0).toNumber(%s)", prop, prop, prop, isUnsigned ? "true" : "");
-                break;
-            case "bytes": gen
-                ("if(typeof d%s===\"string\")", prop)
-                    ("util.base64.decode(d%s,m%s=util.newBuffer(util.base64.length(d%s)),0)", prop, prop, prop)
-                ("else if(d%s.length)", prop)
-                    ("m%s=d%s", prop, prop);
-                break;
-            case "string": gen
-                ("m%s=String(d%s)", prop, prop);
-                break;
-            case "bool": gen
-                ("m%s=Boolean(d%s)", prop, prop);
-                break;
-            /* default: gen
-                ("m%s=d%s", prop, prop);
-                break; */
-        }
-    }
-    return gen;
-    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
-}
-
-/**
- * Generates a plain object to runtime message converter specific to the specified message type.
- * @param {Type} mtype Message type
- * @returns {Codegen} Codegen instance
- */
-converter.fromObject = function fromObject(mtype) {
-    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
-    var fields = mtype.fieldsArray;
-    var gen = util.codegen(["d"], mtype.name + "$fromObject")
-    ("if(d instanceof this.ctor)")
-        ("return d");
-    if (!fields.length) return gen
-    ("return new this.ctor");
-    gen
-    ("var m=new this.ctor");
-    for (var i = 0; i < fields.length; ++i) {
-        var field  = fields[i].resolve(),
-            prop   = util.safeProp(field.name);
-
-        // Map fields
-        if (field.map) { gen
-    ("if(d%s){", prop)
-        ("if(typeof d%s!==\"object\")", prop)
-            ("throw TypeError(%j)", field.fullName + ": object expected")
-        ("m%s={}", prop)
-        ("for(var ks=Object.keys(d%s),i=0;i<ks.length;++i){", prop);
-            genValuePartial_fromObject(gen, field, /* not sorted */ i, prop + "[ks[i]]")
-        ("}")
-    ("}");
-
-        // Repeated fields
-        } else if (field.repeated) { gen
-    ("if(d%s){", prop)
-        ("if(!Array.isArray(d%s))", prop)
-            ("throw TypeError(%j)", field.fullName + ": array expected")
-        ("m%s=[]", prop)
-        ("for(var i=0;i<d%s.length;++i){", prop);
-            genValuePartial_fromObject(gen, field, /* not sorted */ i, prop + "[i]")
-        ("}")
-    ("}");
-
-        // Non-repeated fields
-        } else {
-            if (!(field.resolvedType instanceof Enum)) gen // no need to test for null/undefined if an enum (uses switch)
-    ("if(d%s!=null){", prop); // !== undefined && !== null
-        genValuePartial_fromObject(gen, field, /* not sorted */ i, prop);
-            if (!(field.resolvedType instanceof Enum)) gen
-    ("}");
-        }
-    } return gen
-    ("return m");
-    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
-};
-
-/**
- * Generates a partial value toObject converter.
- * @param {Codegen} gen Codegen instance
- * @param {Field} field Reflected field
- * @param {number} fieldIndex Field index
- * @param {string} prop Property reference
- * @returns {Codegen} Codegen instance
- * @ignore
- */
-function genValuePartial_toObject(gen, field, fieldIndex, prop) {
-    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
-    if (field.resolvedType) {
-        if (field.resolvedType instanceof Enum) gen
-            ("d%s=o.enums===String?types[%i].values[m%s]:m%s", prop, fieldIndex, prop, prop);
-        else gen
-            ("d%s=types[%i].toObject(m%s,o)", prop, fieldIndex, prop);
-    } else {
-        var isUnsigned = false;
-        switch (field.type) {
-            case "double":
-            case "float": gen
-            ("d%s=o.json&&!isFinite(m%s)?String(m%s):m%s", prop, prop, prop, prop);
-                break;
-            case "uint64":
-                isUnsigned = true;
-                // eslint-disable-line no-fallthrough
-            case "int64":
-            case "sint64":
-            case "fixed64":
-            case "sfixed64": gen
-            ("if(typeof m%s===\"number\")", prop)
-                ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
-            ("else") // Long-like
-                ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
-                break;
-            case "bytes": gen
-            ("d%s=o.bytes===String?util.base64.encode(m%s,0,m%s.length):o.bytes===Array?Array.prototype.slice.call(m%s):m%s", prop, prop, prop, prop, prop);
-                break;
-            default: gen
-            ("d%s=m%s", prop, prop);
-                break;
-        }
-    }
-    return gen;
-    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
-}
-
-/**
- * Generates a runtime message to plain object converter specific to the specified message type.
- * @param {Type} mtype Message type
- * @returns {Codegen} Codegen instance
- */
-converter.toObject = function toObject(mtype) {
-    /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
-    var fields = mtype.fieldsArray.slice().sort(util.compareFieldsById);
-    if (!fields.length)
-        return util.codegen()("return {}");
-    var gen = util.codegen(["m", "o"], mtype.name + "$toObject")
-    ("if(!o)")
-        ("o={}")
-    ("var d={}");
-
-    var repeatedFields = [],
-        mapFields = [],
-        normalFields = [],
-        i = 0;
-    for (; i < fields.length; ++i)
-        if (!fields[i].partOf)
-            ( fields[i].resolve().repeated ? repeatedFields
-            : fields[i].map ? mapFields
-            : normalFields).push(fields[i]);
-
-    if (repeatedFields.length) { gen
-    ("if(o.arrays||o.defaults){");
-        for (i = 0; i < repeatedFields.length; ++i) gen
-        ("d%s=[]", util.safeProp(repeatedFields[i].name));
-        gen
-    ("}");
-    }
-
-    if (mapFields.length) { gen
-    ("if(o.objects||o.defaults){");
-        for (i = 0; i < mapFields.length; ++i) gen
-        ("d%s={}", util.safeProp(mapFields[i].name));
-        gen
-    ("}");
-    }
-
-    if (normalFields.length) { gen
-    ("if(o.defaults){");
-        for (i = 0; i < normalFields.length; ++i) {
-            var field = normalFields[i],
-                prop  = util.safeProp(field.name);
-            if (field.resolvedType instanceof Enum) gen
-        ("d%s=o.enums===String?%j:%j", prop, field.resolvedType.valuesById[field.typeDefault], field.typeDefault);
-            else if (field.long) gen
-        ("if(util.Long){")
-            ("var n=new util.Long(%i,%i,%j)", field.typeDefault.low, field.typeDefault.high, field.typeDefault.unsigned)
-            ("d%s=o.longs===String?n.toString():o.longs===Number?n.toNumber():n", prop)
-        ("}else")
-            ("d%s=o.longs===String?%j:%i", prop, field.typeDefault.toString(), field.typeDefault.toNumber());
-            else if (field.bytes) {
-                var arrayDefault = "[" + Array.prototype.slice.call(field.typeDefault).join(",") + "]";
-                gen
-        ("if(o.bytes===String)d%s=%j", prop, String.fromCharCode.apply(String, field.typeDefault))
-        ("else{")
-            ("d%s=%s", prop, arrayDefault)
-            ("if(o.bytes!==Array)d%s=util.newBuffer(d%s)", prop, prop)
-        ("}");
-            } else gen
-        ("d%s=%j", prop, field.typeDefault); // also messages (=null)
-        } gen
-    ("}");
-    }
-    var hasKs2 = false;
-    for (i = 0; i < fields.length; ++i) {
-        var field = fields[i],
-            index = mtype._fieldsArray.indexOf(field),
-            prop  = util.safeProp(field.name);
-        if (field.map) {
-            if (!hasKs2) { hasKs2 = true; gen
-    ("var ks2");
-            } gen
-    ("if(m%s&&(ks2=Object.keys(m%s)).length){", prop, prop)
-        ("d%s={}", prop)
-        ("for(var j=0;j<ks2.length;++j){");
-            genValuePartial_toObject(gen, field, /* sorted */ index, prop + "[ks2[j]]")
-        ("}");
-        } else if (field.repeated) { gen
-    ("if(m%s&&m%s.length){", prop, prop)
-        ("d%s=[]", prop)
-        ("for(var j=0;j<m%s.length;++j){", prop);
-            genValuePartial_toObject(gen, field, /* sorted */ index, prop + "[j]")
-        ("}");
-        } else { gen
-    ("if(m%s!=null&&m.hasOwnProperty(%j)){", prop, field.name); // !== undefined && !== null
-        genValuePartial_toObject(gen, field, /* sorted */ index, prop);
-        if (field.partOf) gen
-        ("if(o.oneofs)")
-            ("d%s=%j", util.safeProp(field.partOf.name), field.name);
-        }
-        gen
-    ("}");
-    }
-    return gen
-    ("return d");
-    /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
-};
-
-
-/***/ }),
-/* 68 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-/**
- * Wrappers for common types.
- * @type {Object.<string,IWrapper>}
- * @const
- */
-var wrappers = exports;
-
-var Message = __webpack_require__(58);
-
-/**
- * From object converter part of an {@link IWrapper}.
- * @typedef WrapperFromObjectConverter
- * @type {function}
- * @param {Object.<string,*>} object Plain object
- * @returns {Message<{}>} Message instance
- * @this Type
- */
-
-/**
- * To object converter part of an {@link IWrapper}.
- * @typedef WrapperToObjectConverter
- * @type {function}
- * @param {Message<{}>} message Message instance
- * @param {IConversionOptions} [options] Conversion options
- * @returns {Object.<string,*>} Plain object
- * @this Type
- */
-
-/**
- * Common type wrapper part of {@link wrappers}.
- * @interface IWrapper
- * @property {WrapperFromObjectConverter} [fromObject] From object converter
- * @property {WrapperToObjectConverter} [toObject] To object converter
- */
-
-// Custom wrapper for Any
-wrappers[".google.protobuf.Any"] = {
-
-    fromObject: function(object) {
-
-        // unwrap value type if mapped
-        if (object && object["@type"]) {
-            var type = this.lookup(object["@type"]);
-            /* istanbul ignore else */
-            if (type) {
-                // type_url does not accept leading "."
-                var type_url = object["@type"].charAt(0) === "." ?
-                    object["@type"].substr(1) : object["@type"];
-                // type_url prefix is optional, but path seperator is required
-                return this.create({
-                    type_url: "/" + type_url,
-                    value: type.encode(type.fromObject(object)).finish()
-                });
-            }
-        }
-
-        return this.fromObject(object);
-    },
-
-    toObject: function(message, options) {
-
-        // decode value if requested and unmapped
-        if (options && options.json && message.type_url && message.value) {
-            // Only use fully qualified type name after the last '/'
-            var name = message.type_url.substring(message.type_url.lastIndexOf("/") + 1);
-            var type = this.lookup(name);
-            /* istanbul ignore else */
-            if (type)
-                message = type.decode(message.value);
-        }
-
-        // wrap value if unmapped
-        if (!(message instanceof this.ctor) && message instanceof Message) {
-            var object = message.$type.toObject(message, options);
-            object["@type"] = message.$type.fullName;
-            return object;
-        }
-
-        return this.toObject(message, options);
-    }
-};
-
-
-/***/ }),
-/* 69 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = tokenize;
-
-var delimRe        = /[\s{}=;:[\],'"()<>]/g,
-    stringDoubleRe = /(?:"([^"\\]*(?:\\.[^"\\]*)*)")/g,
-    stringSingleRe = /(?:'([^'\\]*(?:\\.[^'\\]*)*)')/g;
-
-var setCommentRe = /^ *[*/]+ */,
-    setCommentAltRe = /^\s*\*?\/*/,
-    setCommentSplitRe = /\n/g,
-    whitespaceRe = /\s/,
-    unescapeRe = /\\(.?)/g;
-
-var unescapeMap = {
-    "0": "\0",
-    "r": "\r",
-    "n": "\n",
-    "t": "\t"
-};
-
-/**
- * Unescapes a string.
- * @param {string} str String to unescape
- * @returns {string} Unescaped string
- * @property {Object.<string,string>} map Special characters map
- * @memberof tokenize
- */
-function unescape(str) {
-    return str.replace(unescapeRe, function($0, $1) {
-        switch ($1) {
-            case "\\":
-            case "":
-                return $1;
-            default:
-                return unescapeMap[$1] || "";
-        }
-    });
-}
-
-tokenize.unescape = unescape;
-
-/**
- * Gets the next token and advances.
- * @typedef TokenizerHandleNext
- * @type {function}
- * @returns {string|null} Next token or `null` on eof
- */
-
-/**
- * Peeks for the next token.
- * @typedef TokenizerHandlePeek
- * @type {function}
- * @returns {string|null} Next token or `null` on eof
- */
-
-/**
- * Pushes a token back to the stack.
- * @typedef TokenizerHandlePush
- * @type {function}
- * @param {string} token Token
- * @returns {undefined}
- */
-
-/**
- * Skips the next token.
- * @typedef TokenizerHandleSkip
- * @type {function}
- * @param {string} expected Expected token
- * @param {boolean} [optional=false] If optional
- * @returns {boolean} Whether the token matched
- * @throws {Error} If the token didn't match and is not optional
- */
-
-/**
- * Gets the comment on the previous line or, alternatively, the line comment on the specified line.
- * @typedef TokenizerHandleCmnt
- * @type {function}
- * @param {number} [line] Line number
- * @returns {string|null} Comment text or `null` if none
- */
-
-/**
- * Handle object returned from {@link tokenize}.
- * @interface ITokenizerHandle
- * @property {TokenizerHandleNext} next Gets the next token and advances (`null` on eof)
- * @property {TokenizerHandlePeek} peek Peeks for the next token (`null` on eof)
- * @property {TokenizerHandlePush} push Pushes a token back to the stack
- * @property {TokenizerHandleSkip} skip Skips a token, returns its presence and advances or, if non-optional and not present, throws
- * @property {TokenizerHandleCmnt} cmnt Gets the comment on the previous line or the line comment on the specified line, if any
- * @property {number} line Current line number
- */
-
-/**
- * Tokenizes the given .proto source and returns an object with useful utility functions.
- * @param {string} source Source contents
- * @param {boolean} alternateCommentMode Whether we should activate alternate comment parsing mode.
- * @returns {ITokenizerHandle} Tokenizer handle
- */
-function tokenize(source, alternateCommentMode) {
-    /* eslint-disable callback-return */
-    source = source.toString();
-
-    var offset = 0,
-        length = source.length,
-        line = 1,
-        commentType = null,
-        commentText = null,
-        commentLine = 0,
-        commentLineEmpty = false;
-
-    var stack = [];
-
-    var stringDelim = null;
-
-    /* istanbul ignore next */
-    /**
-     * Creates an error for illegal syntax.
-     * @param {string} subject Subject
-     * @returns {Error} Error created
-     * @inner
-     */
-    function illegal(subject) {
-        return Error("illegal " + subject + " (line " + line + ")");
-    }
-
-    /**
-     * Reads a string till its end.
-     * @returns {string} String read
-     * @inner
-     */
-    function readString() {
-        var re = stringDelim === "'" ? stringSingleRe : stringDoubleRe;
-        re.lastIndex = offset - 1;
-        var match = re.exec(source);
-        if (!match)
-            throw illegal("string");
-        offset = re.lastIndex;
-        push(stringDelim);
-        stringDelim = null;
-        return unescape(match[1]);
-    }
-
-    /**
-     * Gets the character at `pos` within the source.
-     * @param {number} pos Position
-     * @returns {string} Character
-     * @inner
-     */
-    function charAt(pos) {
-        return source.charAt(pos);
-    }
-
-    /**
-     * Sets the current comment text.
-     * @param {number} start Start offset
-     * @param {number} end End offset
-     * @returns {undefined}
-     * @inner
-     */
-    function setComment(start, end) {
-        commentType = source.charAt(start++);
-        commentLine = line;
-        commentLineEmpty = false;
-        var lookback;
-        if (alternateCommentMode) {
-            lookback = 2;  // alternate comment parsing: "//" or "/*"
-        } else {
-            lookback = 3;  // "///" or "/**"
-        }
-        var commentOffset = start - lookback,
-            c;
-        do {
-            if (--commentOffset < 0 ||
-                    (c = source.charAt(commentOffset)) === "\n") {
-                commentLineEmpty = true;
-                break;
-            }
-        } while (c === " " || c === "\t");
-        var lines = source
-            .substring(start, end)
-            .split(setCommentSplitRe);
-        for (var i = 0; i < lines.length; ++i)
-            lines[i] = lines[i]
-                .replace(alternateCommentMode ? setCommentAltRe : setCommentRe, "")
-                .trim();
-        commentText = lines
-            .join("\n")
-            .trim();
-    }
-
-    function isDoubleSlashCommentLine(startOffset) {
-        var endOffset = findEndOfLine(startOffset);
-
-        // see if remaining line matches comment pattern
-        var lineText = source.substring(startOffset, endOffset);
-        // look for 1 or 2 slashes since startOffset would already point past
-        // the first slash that started the comment.
-        var isComment = /^\s*\/{1,2}/.test(lineText);
-        return isComment;
-    }
-
-    function findEndOfLine(cursor) {
-        // find end of cursor's line
-        var endOffset = cursor;
-        while (endOffset < length && charAt(endOffset) !== "\n") {
-            endOffset++;
-        }
-        return endOffset;
-    }
-
-    /**
-     * Obtains the next token.
-     * @returns {string|null} Next token or `null` on eof
-     * @inner
-     */
-    function next() {
-        if (stack.length > 0)
-            return stack.shift();
-        if (stringDelim)
-            return readString();
-        var repeat,
-            prev,
-            curr,
-            start,
-            isDoc;
-        do {
-            if (offset === length)
-                return null;
-            repeat = false;
-            while (whitespaceRe.test(curr = charAt(offset))) {
-                if (curr === "\n")
-                    ++line;
-                if (++offset === length)
-                    return null;
-            }
-
-            if (charAt(offset) === "/") {
-                if (++offset === length) {
-                    throw illegal("comment");
-                }
-                if (charAt(offset) === "/") { // Line
-                    if (!alternateCommentMode) {
-                        // check for triple-slash comment
-                        isDoc = charAt(start = offset + 1) === "/";
-
-                        while (charAt(++offset) !== "\n") {
-                            if (offset === length) {
-                                return null;
-                            }
-                        }
-                        ++offset;
-                        if (isDoc) {
-                            setComment(start, offset - 1);
-                        }
-                        ++line;
-                        repeat = true;
-                    } else {
-                        // check for double-slash comments, consolidating consecutive lines
-                        start = offset;
-                        isDoc = false;
-                        if (isDoubleSlashCommentLine(offset)) {
-                            isDoc = true;
-                            do {
-                                offset = findEndOfLine(offset);
-                                if (offset === length) {
-                                    break;
-                                }
-                                offset++;
-                            } while (isDoubleSlashCommentLine(offset));
-                        } else {
-                            offset = Math.min(length, findEndOfLine(offset) + 1);
-                        }
-                        if (isDoc) {
-                            setComment(start, offset);
-                        }
-                        line++;
-                        repeat = true;
-                    }
-                } else if ((curr = charAt(offset)) === "*") { /* Block */
-                    // check for /** (regular comment mode) or /* (alternate comment mode)
-                    start = offset + 1;
-                    isDoc = alternateCommentMode || charAt(start) === "*";
-                    do {
-                        if (curr === "\n") {
-                            ++line;
-                        }
-                        if (++offset === length) {
-                            throw illegal("comment");
-                        }
-                        prev = curr;
-                        curr = charAt(offset);
-                    } while (prev !== "*" || curr !== "/");
-                    ++offset;
-                    if (isDoc) {
-                        setComment(start, offset - 2);
-                    }
-                    repeat = true;
-                } else {
-                    return "/";
-                }
-            }
-        } while (repeat);
-
-        // offset !== length if we got here
-
-        var end = offset;
-        delimRe.lastIndex = 0;
-        var delim = delimRe.test(charAt(end++));
-        if (!delim)
-            while (end < length && !delimRe.test(charAt(end)))
-                ++end;
-        var token = source.substring(offset, offset = end);
-        if (token === "\"" || token === "'")
-            stringDelim = token;
-        return token;
-    }
-
-    /**
-     * Pushes a token back to the stack.
-     * @param {string} token Token
-     * @returns {undefined}
-     * @inner
-     */
-    function push(token) {
-        stack.push(token);
-    }
-
-    /**
-     * Peeks for the next token.
-     * @returns {string|null} Token or `null` on eof
-     * @inner
-     */
-    function peek() {
-        if (!stack.length) {
-            var token = next();
-            if (token === null)
-                return null;
-            push(token);
-        }
-        return stack[0];
-    }
-
-    /**
-     * Skips a token.
-     * @param {string} expected Expected token
-     * @param {boolean} [optional=false] Whether the token is optional
-     * @returns {boolean} `true` when skipped, `false` if not
-     * @throws {Error} When a required token is not present
-     * @inner
-     */
-    function skip(expected, optional) {
-        var actual = peek(),
-            equals = actual === expected;
-        if (equals) {
-            next();
-            return true;
-        }
-        if (!optional)
-            throw illegal("token '" + actual + "', '" + expected + "' expected");
-        return false;
-    }
-
-    /**
-     * Gets a comment.
-     * @param {number} [trailingLine] Line number if looking for a trailing comment
-     * @returns {string|null} Comment text
-     * @inner
-     */
-    function cmnt(trailingLine) {
-        var ret = null;
-        if (trailingLine === undefined) {
-            if (commentLine === line - 1 && (alternateCommentMode || commentType === "*" || commentLineEmpty)) {
-                ret = commentText;
-            }
-        } else {
-            /* istanbul ignore else */
-            if (commentLine < trailingLine) {
-                peek();
-            }
-            if (commentLine === trailingLine && !commentLineEmpty && (alternateCommentMode || commentType === "/")) {
-                ret = commentText;
-            }
-        }
-        return ret;
-    }
-
-    return Object.defineProperty({
-        next: next,
-        peek: peek,
-        push: push,
-        skip: skip,
-        cmnt: cmnt
-    }, "line", {
-        get: function() { return line; }
-    });
-    /* eslint-enable callback-return */
-}
-
-
-/***/ }),
-/* 70 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-// full library entry point.
-
-
-module.exports = __webpack_require__(71);
-
-
-/***/ }),
-/* 71 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var protobuf = module.exports = __webpack_require__(72);
+var protobuf = module.exports = __webpack_require__(73);
 
 protobuf.build = "full";
 
 // Parser
-protobuf.tokenize         = __webpack_require__(69);
+protobuf.tokenize         = __webpack_require__(36);
 protobuf.parse            = __webpack_require__(87);
 protobuf.common           = __webpack_require__(88);
 
@@ -30330,12 +30504,12 @@ protobuf.Root._configure(protobuf.Type, protobuf.parse, protobuf.common);
 
 
 /***/ }),
-/* 72 */
+/* 73 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var protobuf = module.exports = __webpack_require__(73);
+var protobuf = module.exports = __webpack_require__(74);
 
 protobuf.build = "light";
 
@@ -30408,30 +30582,30 @@ function loadSync(filename, root) {
 protobuf.loadSync = loadSync;
 
 // Serialization
-protobuf.encoder          = __webpack_require__(64);
-protobuf.decoder          = __webpack_require__(65);
-protobuf.verifier         = __webpack_require__(66);
-protobuf.converter        = __webpack_require__(67);
+protobuf.encoder          = __webpack_require__(31);
+protobuf.decoder          = __webpack_require__(32);
+protobuf.verifier         = __webpack_require__(33);
+protobuf.converter        = __webpack_require__(34);
 
 // Reflection
-protobuf.ReflectionObject = __webpack_require__(15);
-protobuf.Namespace        = __webpack_require__(17);
-protobuf.Root             = __webpack_require__(59);
-protobuf.Enum             = __webpack_require__(12);
-protobuf.Type             = __webpack_require__(54);
-protobuf.Field            = __webpack_require__(14);
-protobuf.OneOf            = __webpack_require__(21);
-protobuf.MapField         = __webpack_require__(55);
-protobuf.Service          = __webpack_require__(56);
-protobuf.Method           = __webpack_require__(57);
+protobuf.ReflectionObject = __webpack_require__(8);
+protobuf.Namespace        = __webpack_require__(10);
+protobuf.Root             = __webpack_require__(23);
+protobuf.Enum             = __webpack_require__(3);
+protobuf.Type             = __webpack_require__(18);
+protobuf.Field            = __webpack_require__(7);
+protobuf.OneOf            = __webpack_require__(12);
+protobuf.MapField         = __webpack_require__(19);
+protobuf.Service          = __webpack_require__(20);
+protobuf.Method           = __webpack_require__(21);
 
 // Runtime
-protobuf.Message          = __webpack_require__(58);
-protobuf.wrappers         = __webpack_require__(68);
+protobuf.Message          = __webpack_require__(22);
+protobuf.wrappers         = __webpack_require__(35);
 
 // Utility
-protobuf.types            = __webpack_require__(16);
-protobuf.util             = __webpack_require__(9);
+protobuf.types            = __webpack_require__(9);
+protobuf.util             = __webpack_require__(2);
 
 // Set up possibly cyclic reflection dependencies
 protobuf.ReflectionObject._configure(protobuf.Root);
@@ -30441,7 +30615,7 @@ protobuf.Field._configure(protobuf.Type);
 
 
 /***/ }),
-/* 73 */
+/* 74 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -30457,15 +30631,15 @@ var protobuf = exports;
 protobuf.build = "minimal";
 
 // Serialization
-protobuf.Writer       = __webpack_require__(22);
+protobuf.Writer       = __webpack_require__(16);
 protobuf.BufferWriter = __webpack_require__(81);
-protobuf.Reader       = __webpack_require__(23);
+protobuf.Reader       = __webpack_require__(17);
 protobuf.BufferReader = __webpack_require__(82);
 
 // Utility
-protobuf.util         = __webpack_require__(13);
-protobuf.rpc          = __webpack_require__(62);
-protobuf.roots        = __webpack_require__(63);
+protobuf.util         = __webpack_require__(4);
+protobuf.rpc          = __webpack_require__(29);
+protobuf.roots        = __webpack_require__(30);
 protobuf.configure    = configure;
 
 /* istanbul ignore next */
@@ -30484,7 +30658,7 @@ configure();
 
 
 /***/ }),
-/* 74 */
+/* 75 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -30630,7 +30804,7 @@ base64.test = function test(string) {
 
 
 /***/ }),
-/* 75 */
+/* 76 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -30710,121 +30884,6 @@ EventEmitter.prototype.emit = function emit(evt) {
     }
     return this;
 };
-
-
-/***/ }),
-/* 76 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-__webpack_require__.r(__webpack_exports__);
-
-// EXTERNAL MODULE: ./node_modules/commander/index.js
-var commander = __webpack_require__(0);
-var commander_default = /*#__PURE__*/__webpack_require__.n(commander);
-
-// EXTERNAL MODULE: ./node_modules/lodash/lodash.js
-var lodash = __webpack_require__(1);
-var lodash_default = /*#__PURE__*/__webpack_require__.n(lodash);
-
-// EXTERNAL MODULE: external "fs"
-var external_fs_ = __webpack_require__(6);
-var external_fs_default = /*#__PURE__*/__webpack_require__.n(external_fs_);
-
-// EXTERNAL MODULE: ./node_modules/bluebird/js/release/bluebird.js
-var bluebird = __webpack_require__(18);
-var bluebird_default = /*#__PURE__*/__webpack_require__.n(bluebird);
-
-// CONCATENATED MODULE: ./src/file.js
-
-
-
-
-function readFile(filePath) {
-  return bluebird_default.a.promisify(external_fs_default.a.readFile)(filePath, 'utf-8')
-}
-
-function writeFile(outputFilePath, code) {
-  return bluebird_default.a.promisify(external_fs_default.a.writeFile)(outputFilePath, code)
-}
-
-// EXTERNAL MODULE: ./node_modules/protobufjs/index.js
-var protobufjs = __webpack_require__(70);
-var protobufjs_default = /*#__PURE__*/__webpack_require__.n(protobufjs);
-
-// CONCATENATED MODULE: ./src/protobuf.js
-
-
-
-function toJSON(proto) {
-  const { root } = protobufjs_default.a.parse(proto)
-  return root.toJSON()
-}
-
-function getServices(json) {
-  return lodash_default.a.chain(json.nested.helloworld.nested)
-    .map((value, key)=>{
-      return lodash_default.a.has(value, 'methods') && [key, value]
-    })
-    .compact()
-    .fromPairs()
-    .value()
-}
-
-function getMessages(json) {
-  return lodash_default.a.chain(json.nested.helloworld.nested)
-    .map((value, key)=>{
-      return lodash_default.a.has(value, 'fields') && [key, value]
-    })
-    .compact()
-    .fromPairs()
-    .value()
-}
-
-function revertNames(res, schemas, schema, types) {
-  if (!schema) schema = schemas
-  if (lodash_default.a.isPlainObject(res)) {
-    return lodash_default.a.reduce(res, (obj, value, key)=>{
-      if (lodash_default.a.isArray(value) && /List$/.test(key)) {
-        const renamed = key.match(/(.+)List$/)[1]
-        if (lodash_default.a.has(schema.fields, renamed)) {
-          key = key.match(/(.+)List$/)[1]
-        }
-      }
-      obj[key] = revertNames(value, schemas, schema.fields[key], schema.nested)
-      return obj
-    }, {})
-  } else if (lodash_default.a.isArray(res)) {
-    return lodash_default.a.map(res, (r)=>revertNames(r, schemas, types[schema.type]))
-  } else {
-    return res
-  }
-}
-// CONCATENATED MODULE: ./src/index.js
-
-
-
-
-
-
-commander_default.a
-  .usage('<input_file_path> <output_file_path>')
-  .arguments('<input_file_path> <output_file_path>')
-  .parse(process.argv)
-if (
-  !lodash_default.a.isArray(commander_default.a.args) ||
-  lodash_default.a.size(commander_default.a.args) !== 2
-) {
-  throw new Error('Undefined file paths')
-}
-const [ inputFilePath, src_outputFilePath ] = commander_default.a.args
-readFile(inputFilePath)
-  .then(toJSON)
-  .then((json)=>{
-    console.log('json=', json)
-    console.log('Finished!')
-  })
-  .catch((err)=>console.error(err))
 
 
 /***/ }),
@@ -31344,7 +31403,7 @@ function pool(alloc, slice, size) {
 
 module.exports = LongBits;
 
-var util = __webpack_require__(13);
+var util = __webpack_require__(4);
 
 /**
  * Constructs new long bits.
@@ -31552,10 +31611,10 @@ LongBits.prototype.length = function length() {
 module.exports = BufferWriter;
 
 // extends Writer
-var Writer = __webpack_require__(22);
+var Writer = __webpack_require__(16);
 (BufferWriter.prototype = Object.create(Writer.prototype)).constructor = BufferWriter;
 
-var util = __webpack_require__(13);
+var util = __webpack_require__(4);
 
 var Buffer = util.Buffer;
 
@@ -31640,10 +31699,10 @@ BufferWriter.prototype.string = function write_string_buffer(value) {
 module.exports = BufferReader;
 
 // extends Reader
-var Reader = __webpack_require__(23);
+var Reader = __webpack_require__(17);
 (BufferReader.prototype = Object.create(Reader.prototype)).constructor = BufferReader;
 
-var util = __webpack_require__(13);
+var util = __webpack_require__(4);
 
 /**
  * Constructs a new buffer reader instance.
@@ -31690,7 +31749,7 @@ BufferReader.prototype.string = function read_string_buffer() {
 
 module.exports = Service;
 
-var util = __webpack_require__(13);
+var util = __webpack_require__(4);
 
 // Extends EventEmitter
 (Service.prototype = Object.create(util.EventEmitter.prototype)).constructor = Service;
@@ -31945,8 +32004,8 @@ codegen.verbose = false;
 
 module.exports = fetch;
 
-var asPromise = __webpack_require__(60),
-    inquire   = __webpack_require__(61);
+var asPromise = __webpack_require__(27),
+    inquire   = __webpack_require__(28);
 
 var fs = inquire("fs");
 
@@ -32142,17 +32201,17 @@ module.exports = parse;
 parse.filename = null;
 parse.defaults = { keepCase: false };
 
-var tokenize  = __webpack_require__(69),
-    Root      = __webpack_require__(59),
-    Type      = __webpack_require__(54),
-    Field     = __webpack_require__(14),
-    MapField  = __webpack_require__(55),
-    OneOf     = __webpack_require__(21),
-    Enum      = __webpack_require__(12),
-    Service   = __webpack_require__(56),
-    Method    = __webpack_require__(57),
-    types     = __webpack_require__(16),
-    util      = __webpack_require__(9);
+var tokenize  = __webpack_require__(36),
+    Root      = __webpack_require__(23),
+    Type      = __webpack_require__(18),
+    Field     = __webpack_require__(7),
+    MapField  = __webpack_require__(19),
+    OneOf     = __webpack_require__(12),
+    Enum      = __webpack_require__(3),
+    Service   = __webpack_require__(20),
+    Method    = __webpack_require__(21),
+    types     = __webpack_require__(9),
+    util      = __webpack_require__(2);
 
 var base10Re    = /^[1-9][0-9]*$/,
     base10NegRe = /^-?[1-9][0-9]*$/,
@@ -33300,6 +33359,209 @@ common("field_mask", {
 common.get = function get(file) {
     return common[file] || null;
 };
+
+
+/***/ }),
+/* 89 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+
+// EXTERNAL MODULE: ./node_modules/commander/index.js
+var commander = __webpack_require__(11);
+var commander_default = /*#__PURE__*/__webpack_require__.n(commander);
+
+// EXTERNAL MODULE: ./node_modules/lodash/lodash.js
+var lodash = __webpack_require__(1);
+var lodash_default = /*#__PURE__*/__webpack_require__.n(lodash);
+
+// EXTERNAL MODULE: ./node_modules/case/dist/Case.js
+var Case = __webpack_require__(14);
+var Case_default = /*#__PURE__*/__webpack_require__.n(Case);
+
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __webpack_require__(13);
+var external_fs_default = /*#__PURE__*/__webpack_require__.n(external_fs_);
+
+// EXTERNAL MODULE: ./node_modules/bluebird/js/release/bluebird.js
+var bluebird = __webpack_require__(24);
+var bluebird_default = /*#__PURE__*/__webpack_require__.n(bluebird);
+
+// CONCATENATED MODULE: ./src/file.js
+
+
+
+
+function readFile(filePath) {
+  return bluebird_default.a.promisify(external_fs_default.a.readFile)(filePath, 'utf-8')
+}
+
+function writeFile(outputFilePath, code) {
+  return bluebird_default.a.promisify(external_fs_default.a.writeFile)(outputFilePath, code)
+}
+
+// EXTERNAL MODULE: ./node_modules/protobufjs/index.js
+var protobufjs = __webpack_require__(15);
+var protobufjs_default = /*#__PURE__*/__webpack_require__.n(protobufjs);
+
+// CONCATENATED MODULE: ./src/protobuf.js
+
+
+
+function getRoot(proto) {
+  const { root } = protobufjs_default.a.parse(proto)
+  return root
+}
+
+function toJSON(proto) {
+  return getRoot(proto).toJSON()
+}
+
+function fromJSON(json) {
+  console.log('protobuf=', protobufjs_default.a)
+  const message = new protobufjs_default.a.Message()
+  console.log('message=', message)
+  return message.fromObject(message)
+}
+
+function getServices(json) {
+  return lodash_default.a.chain(json.nested.helloworld.nested)
+    .map((value, key)=>{
+      return lodash_default.a.has(value, 'methods') && [key, value]
+    })
+    .compact()
+    .fromPairs()
+    .value()
+}
+
+function getMessages(json) {
+  return lodash_default.a.chain(json.nested.helloworld.nested)
+    .map((value, key)=>{
+      return lodash_default.a.has(value, 'fields') && [key, value]
+    })
+    .compact()
+    .fromPairs()
+    .value()
+}
+
+function revertNames(res, schemas, schema, types) {
+  if (!schema) schema = schemas
+  if (lodash_default.a.isPlainObject(res)) {
+    return lodash_default.a.reduce(res, (obj, value, key)=>{
+      if (lodash_default.a.isArray(value) && /List$/.test(key)) {
+        const renamed = key.match(/(.+)List$/)[1]
+        if (lodash_default.a.has(schema.fields, renamed)) {
+          key = key.match(/(.+)List$/)[1]
+        }
+      }
+      obj[key] = revertNames(value, schemas, schema.fields[key], schema.nested)
+      return obj
+    }, {})
+  } else if (lodash_default.a.isArray(res)) {
+    return lodash_default.a.map(res, (r)=>revertNames(r, schemas, types[schema.type]))
+  } else {
+    return res
+  }
+}
+// CONCATENATED MODULE: ./src/generator.js
+function generate ({ mutationTypes, actions, messages, host }) {
+  return `import GRPC from './grpc'
+
+export const types = {
+${mutationTypes.map((type)=>`  ${type}: '${type}',`).join('\n')}
+}
+
+export const grpc = new GRPC({ host: ${host} })
+${actions.map(({ name, client, method, message, mutationType })=>`
+export function ${name} (params, options) {
+  const req = new HelloRequest()
+  const users = [0].map(()=>{
+    const r = new HelloRequest.User()
+    r.setName('puyo')
+    r.setAge(999)
+    r.setChildrenList(['uuu'])
+    return r
+  })
+  req.setUsersList(users)
+  return grpc.call({
+      client: ${client},
+      method: '${method}',
+      messageName: '${message}',
+      params,
+    })
+    .then((res)=>{
+      if (options && options.hasMutation) context.commit(types.${mutationType}, res)
+      return res
+    })
+}
+`).join('')}
+`
+}
+
+function generateRequest () {
+
+}
+// CONCATENATED MODULE: ./src/index.js
+
+
+
+
+
+
+
+
+commander_default.a
+  .usage('<proto_file_path> <output_dir>')
+  .arguments('<proto_file_path> <output_dir>')
+  .parse(process.argv)
+if (
+  !lodash_default.a.isArray(commander_default.a.args) ||
+  lodash_default.a.size(commander_default.a.args) !== 2
+) {
+  throw new Error('Undefined file paths')
+}
+const [ protoFilePath, outputDir ] = commander_default.a.args
+readFile(protoFilePath)
+  .then(toJSON)
+  .then((json)=>{
+    const services = getServices(json)
+    const messages = getMessages(json)
+    const mutationTypes = lodash_default.a.chain(services)
+      .map(({ methods }, serviceName)=>{
+        return lodash_default.a.map(methods, (value, methodName)=>`${serviceName}-${methodName}`)
+      })
+      .flatten()
+      .map(Case_default.a.constant)
+      .value()
+    const actions = lodash_default.a.chain(services)
+      .map(({ methods }, serviceName)=>{
+        return lodash_default.a.map(methods, ({ requestType }, methodName)=>{
+          const name = Case_default.a.camel(methodName)
+          return {
+            name,
+            client: `${serviceName}PromiseClient`,
+            method: name,
+            message: requestType,
+            mutationType: Case_default.a.constant(`${serviceName}-${methodName}`),
+          }
+        })
+      })
+      .flatten()
+      .value()
+    return {
+      mutationTypes,
+      actions,
+      messages,
+      host: 'http://localhost:8080/',
+    }
+  })
+  .then(generate)
+  .then((generatedCode)=>{
+    console.log(generatedCode)
+    console.log('Finished!')
+  })
+  .catch((err)=>console.error(err))
 
 
 /***/ })

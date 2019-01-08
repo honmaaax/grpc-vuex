@@ -35,28 +35,32 @@ const proto = `
 
 describe('constructor', ()=>{
   it('returns an instance', () => {
-    expect(new GRPC({ proto, host })).toBeInstanceOf(GRPC)
+    expect(new GRPC(host)).toBeInstanceOf(GRPC)
   })
   it('throws an error if it receives an invalid host', () => {
-    expect(()=>new GRPC({ proto })).toThrow(Error)
-  })
-  it('throws an error if it receives an invalid proto', () => {
-    expect(()=>new GRPC({ host })).toThrow(Error)
+    expect(()=>new GRPC()).toThrow(Error)
   })
 })
 
 describe('call()', ()=>{
   let grpc;
   beforeAll(()=>{
-    grpc = new GRPC({ proto, host })
+    grpc = new GRPC({ host })
   })
   it('returns an instance', () => {
+    const req = new HelloRequest()
+    const users = [0].map(()=>{
+      const r = new HelloRequest.User()
+      r.setName('puyo')
+      r.setAge(999)
+      r.setChildrenList(['uuu'])
+      return r
+    })
+    req.setUsersList(users)
     const result = grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
-      messageName: 'HelloRequest',
-      deserialize: HelloRequest.deserializeBinary,
-      params: {users: [{name: 'puni', age: 999, children: ['uuu']}]},
+      req,
     })
     expect(_.get(result, 'then')).toBeTruthy()
     expect(_.isFunction(result.then)).toBeTruthy()
