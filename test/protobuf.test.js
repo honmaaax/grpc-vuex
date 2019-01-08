@@ -2,7 +2,7 @@ import fs from 'fs'
 import Promise from 'bluebird'
 import _ from 'lodash'
 
-import { toJSON, getServices, getMessages, revertNames } from '../src/protobuf'
+import { toJSON, getServices, getMessages, getMutationTypes, getActions, revertNames } from '../src/protobuf'
 
 const proto = `syntax = "proto3";
 
@@ -126,6 +126,26 @@ describe('getMessages', ()=>{
         }
       }
     })
+  })
+})
+
+describe('getMutationTypes', ()=>{
+  let mutationTypes = []
+  beforeAll(()=>{
+    mutationTypes = getMutationTypes(toJSON(proto))
+  })
+  it('returns array', () => {
+    expect(_.isArray(mutationTypes)).toBeTruthy()
+  })
+})
+
+describe('getActions', ()=>{
+  let actions = []
+  beforeAll(()=>{
+    actions = getActions(toJSON(proto))
+  })
+  it('returns array', () => {
+    expect(_.isArray(actions)).toBeTruthy()
   })
 })
 

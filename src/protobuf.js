@@ -1,5 +1,6 @@
 import _ from 'lodash'
 import protobuf from 'protobufjs'
+import Case from 'case'
 
 export function getRoot(proto) {
   const { root } = protobuf.parse(proto)
@@ -34,6 +35,34 @@ export function getMessages(json) {
     })
     .compact()
     .fromPairs()
+    .value()
+}
+
+export function getMutationTypes(services) {
+  return _.chain(services)
+    .map(({ methods }, serviceName)=>{
+      return _.map(methods, (value, methodName)=>`${serviceName}-${methodName}`)
+    })
+    .flatten()
+    .map(Case.constant)
+    .value()
+}
+
+export function getActions(services) {
+  return _.chain(services)
+    .map(({ methods }, serviceName)=>{
+      return _.map(methods, ({ requestType }, methodName)=>{
+        const name = Case.camel(methodName)
+        return {
+          name,
+          client: `${serviceName}PromiseClient`,
+          method: name,
+          message: requestType,
+          mutationType: Case.constant(`${serviceName}-${methodName}`),
+        }
+      })
+    })
+    .flatten()
     .value()
 }
 

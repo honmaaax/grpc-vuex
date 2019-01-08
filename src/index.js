@@ -22,28 +22,8 @@ readFile(protoFilePath)
   .then((json)=>{
     const services = getServices(json)
     const messages = getMessages(json)
-    const mutationTypes = _.chain(services)
-      .map(({ methods }, serviceName)=>{
-        return _.map(methods, (value, methodName)=>`${serviceName}-${methodName}`)
-      })
-      .flatten()
-      .map(Case.constant)
-      .value()
-    const actions = _.chain(services)
-      .map(({ methods }, serviceName)=>{
-        return _.map(methods, ({ requestType }, methodName)=>{
-          const name = Case.camel(methodName)
-          return {
-            name,
-            client: `${serviceName}PromiseClient`,
-            method: name,
-            message: requestType,
-            mutationType: Case.constant(`${serviceName}-${methodName}`),
-          }
-        })
-      })
-      .flatten()
-      .value()
+    const mutationTypes = getMutationTypes(services)
+    const actions = getActions(services)
     return {
       mutationTypes,
       actions,
