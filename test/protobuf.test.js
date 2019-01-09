@@ -2,7 +2,15 @@ import fs from 'fs'
 import Promise from 'bluebird'
 import _ from 'lodash'
 
-import { toJSON, getServices, getMessages, getMutationTypes, getActions, revertNames } from '../src/protobuf'
+import {
+  toJSON,
+  getServices,
+  getMessages,
+  getModels,
+  getMutationTypes,
+  getActions,
+  revertNames,
+} from '../src/protobuf'
 
 const proto = `syntax = "proto3";
 
@@ -126,6 +134,17 @@ describe('getMessages', ()=>{
         }
       }
     })
+  })
+})
+
+describe('getModels', ()=>{
+  let models = []
+  beforeAll(()=>{
+    const messages = getMessages(toJSON(proto))
+    models = getModels(messages)
+  })
+  it('returns object', () => {
+    expect(_.isPlainObject(models)).toBeTruthy()
   })
 })
 

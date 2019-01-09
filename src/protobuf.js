@@ -38,6 +38,17 @@ export function getMessages(json) {
     .value()
 }
 
+export function getModels(messages) {
+  return _.mapValues(messages, (message)=>{
+    return _.chain(message.fields)
+      .toPairs()
+      .filter(([ name, { rule } ])=>(rule === 'repeated'))
+      .fromPairs()
+      .mapValues(({ type })=>type)
+      .value()
+  })
+}
+
 export function getMutationTypes(services) {
   return _.chain(services)
     .map(({ methods }, serviceName)=>{

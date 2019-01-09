@@ -1,7 +1,13 @@
 import _ from 'lodash'
 
-import { readFile } from '../src/file'
-import { toJSON, getServices, getMessages, getMutationTypes, getActions } from '../src/protobuf'
+import {
+  toJSON,
+  getServices,
+  getMessages,
+  getModels,
+  getMutationTypes,
+  getActions,
+} from '../src/protobuf'
 import {
   generateImportCode,
   generateMutationTypesCode,
@@ -42,7 +48,10 @@ const proto = `
 describe('generateImportCode', ()=>{
   it('returns js code', () => {
     const code = generateImportCode()
-    expect(code).toBe(`import GRPC from './grpc'`)
+    expect(code).toBe(
+`import GRPC from './grpc'
+import Request from './request'`
+    )
   })
 })
 
@@ -70,19 +79,8 @@ describe('generateInitGrpcCode', ()=>{
 
 describe('generateRequestCode', ()=>{
   it('returns js code', () => {
-    const messages = getMessages(toJSON(proto))
-    const code = generateRequestCode('HelloRequest', messages)
-    expect(code).toBe(
-`const req = new HelloRequest()
-  const users = [0].map(()=>{
-    const r = new HelloRequest.User()
-    r.setName('puyo')
-    r.setAge(999)
-    r.setChildrenList(['uuu'])
-    return r
-  })
-  req.setUsersList(users)`
-    )
+    const code = generateRequestCode('HelloRequest', {users: 'User'})
+    expect(code).toBe(`const req = new Request(params, HelloRequest, {"users":"User"})`)
   })
 })
 
@@ -91,19 +89,12 @@ describe('generateActionsCode', ()=>{
     const json = toJSON(proto)
     const services = getServices(json)
     const messages = getMessages(json)
+    const models = getModels(messages)
     const actions = getActions(services)
-    const code = generateActionsCode(actions, messages)
+    const code = generateActionsCode(actions, models)
     expect(code).toBe(
 `export function sayHello (params, options) {
-  const req = new HelloRequest()
-  const users = [0].map(()=>{
-    const r = new HelloRequest.User()
-    r.setName('puyo')
-    r.setAge(999)
-    r.setChildrenList(['uuu'])
-    return r
-  })
-  req.setUsersList(users)
+  const req = new Request(params, HelloRequest, {"users":"User"})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
