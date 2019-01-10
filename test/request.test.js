@@ -1,23 +1,32 @@
 import _ from 'lodash'
 
-import Request from '../src/request'
+import { createRequest } from '../src/request'
 import { HelloRequest } from './grpc/helloworld_pb'
 
-describe('constructor', ()=>{
-  it('returns an instance', () => {
+describe('createRequest', ()=>{
+  it('sets parames to request object', () => {
     const params = {
       users: [
         {
-          name: 'puni',
+          name: 'hoge',
           age: 33,
-          children: ['aaa'],
+          children: ['fuga'],
         }
       ]
     }
     const models = {users: 'User'}
-    expect(new Request(params, HelloRequest, models)).toBeInstanceOf(Request)
+    const req = createRequest(params, HelloRequest, models)
+    expect(req.toObject()).toEqual({
+      usersList: [
+        {
+          name: 'hoge',
+          age: 33,
+          childrenList: ['fuga']
+        }
+      ]
+    })
   })
   it('throws an error if it receives an invalid host', () => {
-    expect(()=>new Request()).toThrow(Error)
+    expect(()=>createRequest()).toThrow(Error)
   })
 })

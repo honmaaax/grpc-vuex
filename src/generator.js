@@ -3,7 +3,7 @@ import Case from 'case'
 
 export function generateImportCode () {
   return `import GRPC from './grpc'
-import Request from './request'`
+import { createRequest } from './request'`
 }
 
 export function generateMutationTypesCode (mutationTypes) {
@@ -21,7 +21,7 @@ export function generateInitGrpcCode (host) {
 }
 
 export function generateRequestCode (message, models) {
-  return `const req = new Request(params, ${message}, ${JSON.stringify(models)})`
+  return `const req = createRequest(params, ${message}, ${JSON.stringify(models)})`
 }
 
 export function generateActionsCode (actions, models) {
