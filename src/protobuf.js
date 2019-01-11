@@ -19,7 +19,11 @@ export function fromJSON(json) {
 }
 
 export function getServices(json) {
-  return _.chain(json.nested.helloworld.nested)
+  return _.chain(json)
+    .result('nested')
+    .toArray()
+    .first()
+    .result('nested')
     .map((value, key)=>{
       return _.has(value, 'methods') && [key, value]
     })
@@ -29,7 +33,11 @@ export function getServices(json) {
 }
 
 export function getMessages(json) {
-  return _.chain(json.nested.helloworld.nested)
+  return _.chain(json)
+    .result('nested')
+    .toArray()
+    .first()
+    .result('nested')
     .map((value, key)=>{
       return _.has(value, 'fields') && [key, value]
     })

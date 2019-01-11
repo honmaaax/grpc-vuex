@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package fewcollection;
+
+service UserServices {
+  rpc GetUsers (GetUsersRequest) returns (GetUsersReply);
+}
+
+message Pagenation {
+  string perpage = 1;
+  int32 page = 2;
+}
+
+message User {
+  string name = 1;
+  int32 age = 2;
+  repeated string children = 3;
+}
+
+message GetUsersRequest {
+  repeated User users = 1;
+  int32 total = 2;
+  Pagenation pagenation = 3;
+}
+
+message GetUsersReply {
+  repeated User users = 1;
+}

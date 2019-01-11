@@ -1,24 +1,41 @@
 import Case from './case'
+import Type from './type'
 
-export function createRequest (params, Message, models) {
-  const req = new Message()
-  if ( params ) {
-    Object.keys(params).forEach((key)=>{
-      const value = params[key]
-      const list = value.map((item)=>{
-        const r = new Message[models[key]]()
-        Object.keys(item).forEach((key)=>{
-          const value = item[key]
-          if ( value !== undefined ) {
-            const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`
-            if (!r[setter]) throw new Error(`Invalid request parameters. '${key}'`)
-            r[setter](value)
-          }
-        })
-        return r
+// 最初はnew GetUsersRequest()
+// usersはnew GetUsersRequest().setUsersList()
+// usersの中身はnew User().setName()
+// pagenationはnew GetUsersRequest().setPagination()
+// pagenationの中身はnew Pagenation().setPage()
+export function _createRequest (key, value, request, messages) {
+  if ( Type.isObject(value) ) {
+    Object.keys(value)
+      .map((key)=>[key, value[key]])
+      .forEach(([key, value])=>{
+        _createRequest(key, value, request, messages)
       })
-      req[`set${Case.pascal(key)}List`](list)
+    return request
+  } else if ( Type.isArray(value) ) {
+    const req = messages[key] ? new messages[key] : null
+    value = value.map((value)=>{
+      if ( Type.isObject(value) ) {
+        return _createRequest(key, value, req, messages)
+      }
+      return value
     })
   }
-  return req
+  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`
+  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)
+  request[setter](value)
+  return request
+}
+
+export function createRequest (params, Message, messages) {
+  const request = new Message()
+  if ( !params ) return;
+  Object.keys(params)
+    .map((key)=>[key, params[key]])
+    .forEach(([key, value])=>{
+      _createRequest(key, value, request, messages)
+    })
+  return request
 }
