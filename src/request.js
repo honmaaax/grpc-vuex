@@ -1,11 +1,6 @@
 import Case from './case'
 import Type from './type'
 
-// 最初はnew GetUsersRequest()
-// usersはnew GetUsersRequest().setUsersList()
-// usersの中身はnew User().setName()
-// pagenationはnew GetUsersRequest().setPagination()
-// pagenationの中身はnew Pagenation().setPage()
 export function _createObjectRequest (key, value, messages) {
   const req = new messages[key]()
   Object.keys(value)
