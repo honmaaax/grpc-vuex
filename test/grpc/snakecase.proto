@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package snakecase;
+
+service SnakeServices {
+  rpc GetSnake (GetSnakeRequest) returns (GetSnakeReply);
+}
+
+message Pagenation {
+  string per_page = 1;
+  int32 page_num = 2;
+}
+
+message Snake {
+  string display_name = 1;
+  int32 my_age = 2;
+  repeated string children_ids = 3;
+}
+
+message GetSnakeRequest {
+  repeated Snake snakes_data = 1;
+  int32 total_count = 2;
+  Pagenation pagenation_condition = 3;
+}
+
+message GetSnakeReply {
+  repeated Snake snakes_data = 1;
+  int32 total_count = 2;
+  Pagenation pagenation_condition = 3;
+}

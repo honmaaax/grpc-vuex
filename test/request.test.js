@@ -3,6 +3,7 @@ import _ from 'lodash'
 import { createRequest } from '../src/request'
 import Helloworld from './grpc/helloworld_pb'
 import fewcollection from './grpc/fewcollection_pb'
+import snakecase from './grpc/snakecase_pb'
 
 describe('createRequest', ()=>{
   it('sets parames', () => {
@@ -89,6 +90,49 @@ describe('createRequest', ()=>{
         page: 1,
       },
       total: 67,
+    })
+  })
+  it('replaces camel case parames to snake case', () => {
+    const params = {
+      snakesData: [
+        {
+          displayName: 'hoge',
+          myAge: 33,
+          childrenIds: ['fuga'],
+        },{
+          displayName: 'piyo',
+          myAge: 55,
+          childrenIds: ['puyo'],
+        }
+      ],
+      pagenationCondition: {
+        perPage: 30,
+        pageNum: 1,
+      },
+      totalCount: 67,
+    }
+    const models = {
+      snakesData: snakecase.Snake,
+      pagenationCondition: snakecase.Pagenation,
+    }
+    const req = createRequest(params, snakecase.GetSnakeRequest, models)
+    expect(req.toObject()).toEqual({
+      snakesDataList: [
+        {
+          displayName: 'hoge',
+          myAge: 33,
+          childrenIdsList: ['fuga']
+        },{
+          displayName: 'piyo',
+          myAge: 55,
+          childrenIdsList: ['puyo']
+        }
+      ],
+      pagenationCondition: {
+        perPage: 30,
+        pageNum: 1,
+      },
+      totalCount: 67,
     })
   })
 })
