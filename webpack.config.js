@@ -1,5 +1,6 @@
 const webpack = require('webpack')
 const path = require('path')
+const webpackNodeExternals = require('webpack-node-externals')
 
 module.exports = {
   mode: 'production',
@@ -12,4 +13,5 @@ module.exports = {
   plugins: [
     new webpack.BannerPlugin({ banner: "#!/usr/bin/env node", raw: true })
   ],
+  externals :[webpackNodeExternals()],
 }

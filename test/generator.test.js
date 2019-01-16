@@ -73,7 +73,7 @@ describe('generateInitGrpcCode', ()=>{
   it('returns js code', () => {
     const host = 'http://localhost:8080/'
     const code = generateInitGrpcCode(host)
-    expect(code).toBe(`export const grpc = new GRPC({ host: ${host} })`)
+    expect(code).toBe(`export const grpc = new GRPC({ host: '${host}' })`)
   })
 })
 

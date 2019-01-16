@@ -17,7 +17,7 @@ export function generateMutationTypesCode (mutationTypes) {
 }
 
 export function generateInitGrpcCode (host) {
-  return `export const grpc = new GRPC({ host: ${host} })`
+  return `export const grpc = new GRPC({ host: '${host}' })`
 }
 
 export function generateRequestCode (message, models) {
