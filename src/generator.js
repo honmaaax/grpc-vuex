@@ -2,8 +2,8 @@ import _ from 'lodash'
 import Case from 'case'
 
 export function generateImportCode () {
-  return `import GRPC from './grpc'
-import { createRequest } from './request'`
+  return `import GRPC from '../src/grpc'
+import { createRequest } from '../src/request'`
 }
 
 export function generateMutationTypesCode (mutationTypes) {

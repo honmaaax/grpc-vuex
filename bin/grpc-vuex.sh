@@ -82,7 +82,7 @@
 /******/
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 8);
+/******/ 	return __webpack_require__(__webpack_require__.s = 7);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -113,36 +113,26 @@ module.exports = require("protobufjs");
 /* 4 */
 /***/ (function(module, exports) {
 
-module.exports = require("path");
+module.exports = require("fs");
 
 /***/ }),
 /* 5 */
 /***/ (function(module, exports) {
 
-module.exports = require("fs");
+module.exports = require("bluebird");
 
 /***/ }),
 /* 6 */
 /***/ (function(module, exports) {
 
-module.exports = require("bluebird");
-
-/***/ }),
-/* 7 */
-/***/ (function(module, exports) {
-
 module.exports = require("webpack");
 
 /***/ }),
-/* 8 */
+/* 7 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-
-// EXTERNAL MODULE: external "path"
-var external_path_ = __webpack_require__(4);
-var external_path_default = /*#__PURE__*/__webpack_require__.n(external_path_);
 
 // EXTERNAL MODULE: external "commander"
 var external_commander_ = __webpack_require__(2);
@@ -153,19 +143,18 @@ var external_lodash_ = __webpack_require__(0);
 var external_lodash_default = /*#__PURE__*/__webpack_require__.n(external_lodash_);
 
 // EXTERNAL MODULE: external "webpack"
-var external_webpack_ = __webpack_require__(7);
+var external_webpack_ = __webpack_require__(6);
 var external_webpack_default = /*#__PURE__*/__webpack_require__.n(external_webpack_);
 
 // EXTERNAL MODULE: external "fs"
-var external_fs_ = __webpack_require__(5);
+var external_fs_ = __webpack_require__(4);
 var external_fs_default = /*#__PURE__*/__webpack_require__.n(external_fs_);
 
 // EXTERNAL MODULE: external "bluebird"
-var external_bluebird_ = __webpack_require__(6);
+var external_bluebird_ = __webpack_require__(5);
 var external_bluebird_default = /*#__PURE__*/__webpack_require__.n(external_bluebird_);
 
 // CONCATENATED MODULE: ./src/file.js
-
 
 
 
@@ -298,8 +287,8 @@ function revertNames(res, schemas, schema, types) {
 
 
 function generateImportCode () {
-  return `import GRPC from './grpc'
-import { createRequest } from './request'`
+  return `import GRPC from '../src/grpc'
+import { createRequest } from '../src/request'`
 }
 
 function generateMutationTypesCode (mutationTypes) {
@@ -356,7 +345,6 @@ ${generateActionsCode(actions, messages)}
 
 
 
-
 external_commander_default.a
   .usage('<proto_file_path> <output_file_path>')
   .arguments('<proto_file_path> <output_file_path>')
@@ -368,7 +356,7 @@ if (
   throw new Error('Undefined file paths')
 }
 const [ protoFilePath, src_outputFilePath ] = external_commander_default.a.args
-const tempFilePath = external_path_default.a.resolve('./_grpc-vuex-index.js')
+const tempFilePath = './dist/_grpc-vuex-index.js'
 readFile(protoFilePath)
   .then(toJSON)
   .then((json)=>{
@@ -385,14 +373,25 @@ readFile(protoFilePath)
   })
   .then(generateCode)
   .then((code)=>writeFile(tempFilePath, code))
-  .then(()=>external_webpack_default()({
-    entry: tempFilePath,
-    output: {
-      filename: src_outputFilePath,
-    },
-    mode: 'production',
-    target: 'node',
-  }))
+  .then(()=>{
+    return new Promise((resolve, reject)=>{
+      external_webpack_default()({
+        entry: tempFilePath,
+        output: {
+          filename: src_outputFilePath,
+        },
+        mode: 'development',
+        target: 'node',
+      }, (err, stats)=>{
+        if (err) {
+          return reject(err)
+        } else if (stats.hasErrors()) {
+          return reject(stats)
+        }
+        return resolve()
+      })
+    })
+  })
   .catch((err)=>console.error(err))
   
 

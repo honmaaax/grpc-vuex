@@ -61,4 +61,5 @@ typings/
 .next
 
 # Custom
-_grpc-vuex-index.js
+/dist/*
+!.gitkeep

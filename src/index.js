@@ -1,4 +1,3 @@
-import path from 'path'
 import program from 'commander'
 import _ from 'lodash'
 import webpack from 'webpack'
@@ -24,7 +23,7 @@ if (
   throw new Error('Undefined file paths')
 }
 const [ protoFilePath, outputFilePath ] = program.args
-const tempFilePath = path.resolve('./_grpc-vuex-index.js')
+const tempFilePath = './dist/_grpc-vuex-index.js'
 readFile(protoFilePath)
   .then(toJSON)
   .then((json)=>{
@@ -41,13 +40,24 @@ readFile(protoFilePath)
   })
   .then(generateCode)
   .then((code)=>writeFile(tempFilePath, code))
-  .then(()=>webpack({
-    entry: tempFilePath,
-    output: {
-      filename: outputFilePath,
-    },
-    mode: 'production',
-    target: 'node',
-  }))
+  .then(()=>{
+    return new Promise((resolve, reject)=>{
+      webpack({
+        entry: tempFilePath,
+        output: {
+          filename: outputFilePath,
+        },
+        mode: 'development',
+        target: 'node',
+      }, (err, stats)=>{
+        if (err) {
+          return reject(err)
+        } else if (stats.hasErrors()) {
+          return reject(stats)
+        }
+        return resolve()
+      })
+    })
+  })
   .catch((err)=>console.error(err))
   
