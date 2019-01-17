@@ -4,7 +4,7 @@ import GRPC from '../src/grpc'
 import { GreeterPromiseClient } from './grpc/helloworld_grpc_web_pb'
 import { HelloRequest } from './grpc/helloworld_pb'
 
-const host = 'http://localhost:8080'
+const endpoint = 'http://localhost:8080'
 const proto = `
   syntax = "proto3";
 
@@ -35,9 +35,9 @@ const proto = `
 
 describe('constructor', ()=>{
   it('returns an instance', () => {
-    expect(new GRPC(host)).toBeInstanceOf(GRPC)
+    expect(new GRPC(endpoint)).toBeInstanceOf(GRPC)
   })
-  it('throws an error if it receives an invalid host', () => {
+  it('throws an error if it receives an invalid endpoint', () => {
     expect(()=>new GRPC()).toThrow(Error)
   })
 })
@@ -45,7 +45,7 @@ describe('constructor', ()=>{
 describe('call()', ()=>{
   let grpc;
   beforeAll(()=>{
-    grpc = new GRPC({ host })
+    grpc = new GRPC(endpoint)
   })
   it('returns an instance', () => {
     const req = new HelloRequest()

@@ -1,10 +1,10 @@
 export default class GRPC {
-  constructor (host) {
+  constructor (endpoint) {
     this.defaultOptions = {
       deadline: (new Date()).setSeconds((new Date()).getSeconds() + 5)
     }
-    if (host) {
-      this.host = host
+    if (endpoint) {
+      this.endpoint = endpoint
     } else {
       throw new Error('Invalid host')
     }

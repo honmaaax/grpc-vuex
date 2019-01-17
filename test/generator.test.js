@@ -107,9 +107,9 @@ describe('generateMutationTypesCode', ()=>{
 
 describe('generateInitGrpcCode', ()=>{
   it('returns js code', () => {
-    const host = 'http://localhost:8080/'
-    const code = generateInitGrpcCode(host)
-    expect(code).toBe(`export const grpc = new GRPC({ host: '${host}' })`)
+    const endpoint = 'http://localhost:8080/'
+    const code = generateInitGrpcCode(endpoint)
+    expect(code).toBe(`export const grpc = new GRPC('${endpoint}')`)
   })
 })
 
@@ -162,7 +162,7 @@ describe('generateCode', ()=>{
       mutationTypes,
       actions,
       messages,
-      host: 'http://localhost:8080/',
+      endpoint: 'http://localhost:8080/',
     })
     expect(_.isString(code)).toBeTruthy()
   })

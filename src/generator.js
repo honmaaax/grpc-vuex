@@ -51,8 +51,8 @@ export function generateMutationTypesCode (mutationTypes) {
     .value()
 }
 
-export function generateInitGrpcCode (host) {
-  return `export const grpc = new GRPC({ host: '${host}' })`
+export function generateInitGrpcCode (endpoint) {
+  return `export const grpc = new GRPC('${endpoint}')`
 }
 
 export function generateRequestCode (message, models) {
@@ -76,12 +76,12 @@ export function generateActionsCode (actions, models) {
   ).join('\n\n')
 }
 
-export function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, host }) {
+export function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, endpoint }) {
   return `${generateImportCode(protoFileNameWithoutExt, actions)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
-${generateInitGrpcCode(host)}
+${generateInitGrpcCode(endpoint)}
 ${generateActionsCode(actions, messages)}
 `
 }

@@ -356,8 +356,8 @@ function generateMutationTypesCode (mutationTypes) {
     .value()
 }
 
-function generateInitGrpcCode (host) {
-  return `export const grpc = new GRPC({ host: '${host}' })`
+function generateInitGrpcCode (endpoint) {
+  return `export const grpc = new GRPC('${endpoint}')`
 }
 
 function generateRequestCode (message, models) {
@@ -381,12 +381,12 @@ function generateActionsCode (actions, models) {
   ).join('\n\n')
 }
 
-function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, host }) {
+function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, endpoint }) {
   return `${generateImportCode(protoFileNameWithoutExt, actions)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
-${generateInitGrpcCode(host)}
+${generateInitGrpcCode(endpoint)}
 ${generateActionsCode(actions, messages)}
 `
 }
@@ -425,7 +425,7 @@ readFile(src_protoFilePath)
       mutationTypes,
       actions,
       messages,
-      host: 'http://localhost:8080/',
+      endpoint: 'http://localhost:8080/',
     }
   })
   .then(generateCode)

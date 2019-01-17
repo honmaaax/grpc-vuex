@@ -40,7 +40,7 @@ readFile(protoFilePath)
       mutationTypes,
       actions,
       messages,
-      host: 'http://localhost:8080/',
+      endpoint: 'http://localhost:8080/',
     }
   })
   .then(generateCode)
