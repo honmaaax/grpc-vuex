@@ -82,7 +82,7 @@
 /******/
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 7);
+/******/ 	return __webpack_require__(__webpack_require__.s = 9);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -95,47 +95,63 @@ module.exports = require("lodash");
 /* 1 */
 /***/ (function(module, exports) {
 
-module.exports = require("case");
+module.exports = require("bluebird");
 
 /***/ }),
 /* 2 */
 /***/ (function(module, exports) {
 
-module.exports = require("commander");
+module.exports = require("path");
 
 /***/ }),
 /* 3 */
 /***/ (function(module, exports) {
 
-module.exports = require("protobufjs");
+module.exports = require("fs");
 
 /***/ }),
 /* 4 */
 /***/ (function(module, exports) {
 
-module.exports = require("fs");
+module.exports = require("commander");
 
 /***/ }),
 /* 5 */
 /***/ (function(module, exports) {
 
-module.exports = require("bluebird");
+module.exports = require("protobufjs");
 
 /***/ }),
 /* 6 */
 /***/ (function(module, exports) {
 
-module.exports = require("webpack");
+module.exports = require("case");
 
 /***/ }),
 /* 7 */
+/***/ (function(module, exports) {
+
+module.exports = require("webpack");
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports) {
+
+module.exports = require("child_process");
+
+/***/ }),
+/* 9 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 
+// EXTERNAL MODULE: external "path"
+var external_path_ = __webpack_require__(2);
+var external_path_default = /*#__PURE__*/__webpack_require__.n(external_path_);
+
 // EXTERNAL MODULE: external "commander"
-var external_commander_ = __webpack_require__(2);
+var external_commander_ = __webpack_require__(4);
 var external_commander_default = /*#__PURE__*/__webpack_require__.n(external_commander_);
 
 // EXTERNAL MODULE: external "lodash"
@@ -143,15 +159,15 @@ var external_lodash_ = __webpack_require__(0);
 var external_lodash_default = /*#__PURE__*/__webpack_require__.n(external_lodash_);
 
 // EXTERNAL MODULE: external "webpack"
-var external_webpack_ = __webpack_require__(6);
+var external_webpack_ = __webpack_require__(7);
 var external_webpack_default = /*#__PURE__*/__webpack_require__.n(external_webpack_);
 
 // EXTERNAL MODULE: external "fs"
-var external_fs_ = __webpack_require__(4);
+var external_fs_ = __webpack_require__(3);
 var external_fs_default = /*#__PURE__*/__webpack_require__.n(external_fs_);
 
 // EXTERNAL MODULE: external "bluebird"
-var external_bluebird_ = __webpack_require__(5);
+var external_bluebird_ = __webpack_require__(1);
 var external_bluebird_default = /*#__PURE__*/__webpack_require__.n(external_bluebird_);
 
 // CONCATENATED MODULE: ./src/file.js
@@ -168,11 +184,11 @@ function writeFile(outputFilePath, code) {
 }
 
 // EXTERNAL MODULE: external "protobufjs"
-var external_protobufjs_ = __webpack_require__(3);
+var external_protobufjs_ = __webpack_require__(5);
 var external_protobufjs_default = /*#__PURE__*/__webpack_require__.n(external_protobufjs_);
 
 // EXTERNAL MODULE: external "case"
-var external_case_ = __webpack_require__(1);
+var external_case_ = __webpack_require__(6);
 var external_case_default = /*#__PURE__*/__webpack_require__.n(external_case_);
 
 // CONCATENATED MODULE: ./src/protobuf.js
@@ -282,13 +298,52 @@ function revertNames(res, schemas, schema, types) {
     return res
   }
 }
+// EXTERNAL MODULE: external "child_process"
+var external_child_process_ = __webpack_require__(8);
+var external_child_process_default = /*#__PURE__*/__webpack_require__.n(external_child_process_);
+
 // CONCATENATED MODULE: ./src/generator.js
 
 
 
-function generateImportCode () {
+
+
+
+function generateFileByProtoc (protoFilePathAndName) {
+  const protoFilePath = external_path_default.a.dirname(protoFilePathAndName) || './'
+  const protoFileName =  external_path_default.a.basename(protoFilePathAndName)
+  const protoFileNameWithoutExt =  external_path_default.a.basename(protoFileName, '.proto')
+  const outputFilePath = './dist'
+  const command = `protoc -I=${protoFilePath} ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
+  return new external_bluebird_default.a((resolve, reject)=>{
+    external_child_process_default.a.exec(command, (err, stdout, stderr)=>{
+      if (err) {
+        reject(err)
+      } else if (stderr) {
+        reject(stderr)
+      } else {
+        resolve(stdout)
+      }
+    })
+  })
+    .then(()=>external_bluebird_default.a.all([
+      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./dist/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
+      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./dist/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
+    ]))
+    .then((codes)=>codes.join('\n\n'))
+    .catch((err)=>console.error(err))
+}
+
+function generateImportCode (protoFileNameWithoutExt, actions) {
+  const requests = external_lodash_default.a.chain(actions)
+    .map(({ message })=>message)
+    .uniq()
+    .join(', ')
+    .value()
   return `import GRPC from '../src/grpc'
-import { createRequest } from '../src/request'`
+import { createRequest } from '../src/request'
+import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
+import { ${requests} } from './${protoFileNameWithoutExt}_pb'`
 }
 
 function generateMutationTypesCode (mutationTypes) {
@@ -316,7 +371,6 @@ function generateActionsCode (actions, models) {
   return grpc.call({
       client: ${client},
       method: '${method}',
-      messageName: '${message}',
       params,
     })
     .then((res)=>{
@@ -327,8 +381,8 @@ function generateActionsCode (actions, models) {
   ).join('\n\n')
 }
 
-function generateCode ({ mutationTypes, actions, messages, host }) {
-  return `${generateImportCode()}
+function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, host }) {
+  return `${generateImportCode(protoFileNameWithoutExt, actions)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
@@ -337,6 +391,7 @@ ${generateActionsCode(actions, messages)}
 `
 }
 // CONCATENATED MODULE: ./src/index.js
+
 
 
 
@@ -355,16 +410,18 @@ if (
 ) {
   throw new Error('Undefined file paths')
 }
-const [ protoFilePath, src_outputFilePath ] = external_commander_default.a.args
+const [ src_protoFilePath, src_outputFilePath ] = external_commander_default.a.args
 const tempFilePath = './dist/_grpc-vuex-index.js'
-readFile(protoFilePath)
+readFile(src_protoFilePath)
   .then(toJSON)
   .then((json)=>{
+    const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
     const services = getServices(json)
     const messages = getMessages(json)
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services)
     return {
+      protoFileNameWithoutExt,
       mutationTypes,
       actions,
       messages,

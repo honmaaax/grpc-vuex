@@ -1,9 +1,44 @@
+import path from 'path'
+import fs from 'fs'
+import Promise from 'bluebird'
 import _ from 'lodash'
-import Case from 'case'
+import childProcess from 'child_process'
 
-export function generateImportCode () {
+export function generateFileByProtoc (protoFilePathAndName) {
+  const protoFilePath = path.dirname(protoFilePathAndName) || './'
+  const protoFileName =  path.basename(protoFilePathAndName)
+  const protoFileNameWithoutExt =  path.basename(protoFileName, '.proto')
+  const outputFilePath = './dist'
+  const command = `protoc -I=${protoFilePath} ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
+  return new Promise((resolve, reject)=>{
+    childProcess.exec(command, (err, stdout, stderr)=>{
+      if (err) {
+        reject(err)
+      } else if (stderr) {
+        reject(stderr)
+      } else {
+        resolve(stdout)
+      }
+    })
+  })
+    .then(()=>Promise.all([
+      Promise.promisify(fs.readFile)(`./dist/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
+      Promise.promisify(fs.readFile)(`./dist/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
+    ]))
+    .then((codes)=>codes.join('\n\n'))
+    .catch((err)=>console.error(err))
+}
+
+export function generateImportCode (protoFileNameWithoutExt, actions) {
+  const requests = _.chain(actions)
+    .map(({ message })=>message)
+    .uniq()
+    .join(', ')
+    .value()
   return `import GRPC from '../src/grpc'
-import { createRequest } from '../src/request'`
+import { createRequest } from '../src/request'
+import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
+import { ${requests} } from './${protoFileNameWithoutExt}_pb'`
 }
 
 export function generateMutationTypesCode (mutationTypes) {
@@ -31,7 +66,6 @@ export function generateActionsCode (actions, models) {
   return grpc.call({
       client: ${client},
       method: '${method}',
-      messageName: '${message}',
       params,
     })
     .then((res)=>{
@@ -42,8 +76,8 @@ export function generateActionsCode (actions, models) {
   ).join('\n\n')
 }
 
-export function generateCode ({ mutationTypes, actions, messages, host }) {
-  return `${generateImportCode()}
+export function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, host }) {
+  return `${generateImportCode(protoFileNameWithoutExt, actions)}
 
 ${generateMutationTypesCode(mutationTypes)}
 

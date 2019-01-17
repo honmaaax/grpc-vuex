@@ -1,3 +1,4 @@
+import path from 'path'
 import program from 'commander'
 import _ from 'lodash'
 import webpack from 'webpack'
@@ -10,7 +11,9 @@ import {
   getMutationTypes,
   getActions,
 } from './protobuf'
-import { generateCode } from './generator'
+import {
+  generateCode,
+} from './generator'
 
 program
   .usage('<proto_file_path> <output_file_path>')
@@ -27,11 +30,13 @@ const tempFilePath = './dist/_grpc-vuex-index.js'
 readFile(protoFilePath)
   .then(toJSON)
   .then((json)=>{
+    const protoFileNameWithoutExt = path.basename(protoFilePath, '.proto')
     const services = getServices(json)
     const messages = getMessages(json)
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services)
     return {
+      protoFileNameWithoutExt,
       mutationTypes,
       actions,
       messages,
