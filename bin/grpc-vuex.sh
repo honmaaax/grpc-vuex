@@ -360,8 +360,12 @@ function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-function generateRequestCode (message, models) {
-  return `const req = createRequest(params, ${message}, ${JSON.stringify(models)})`
+function generateRequestCode (message, model) {
+  model = external_lodash_default.a.chain(model)
+    .map((value, key)=>(`${key}:${message}.${value}`))
+    .join(',')
+    .value()
+  return `const req = createRequest(params, ${message}, {${model}})`
 }
 
 function generateActionsCode (actions, models) {
@@ -371,7 +375,7 @@ function generateActionsCode (actions, models) {
   return grpc.call({
       client: ${client},
       method: '${method}',
-      params,
+      req,
     })
     .then((res)=>{
       if (options && options.hasMutation) context.commit(types.${mutationType}, res)
@@ -381,13 +385,13 @@ function generateActionsCode (actions, models) {
   ).join('\n\n')
 }
 
-function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, endpoint }) {
+function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, models, endpoint }) {
   return `${generateImportCode(protoFileNameWithoutExt, actions)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(actions, messages)}
+${generateActionsCode(actions, models)}
 `
 }
 // CONCATENATED MODULE: ./src/index.js
@@ -417,14 +421,14 @@ readFile(src_protoFilePath)
   .then((json)=>{
     const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
     const services = getServices(json)
-    const messages = getMessages(json)
+    const models = getModels(getMessages(json))
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services)
     return {
       protoFileNameWithoutExt,
       mutationTypes,
       actions,
-      messages,
+      models,
       endpoint: 'http://localhost:8080/',
     }
   })
@@ -436,6 +440,7 @@ readFile(src_protoFilePath)
         entry: tempFilePath,
         output: {
           filename: src_outputFilePath,
+          libraryTarget: 'commonjs',
         },
         mode: 'development',
         target: 'node',

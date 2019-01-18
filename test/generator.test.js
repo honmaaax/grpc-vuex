@@ -116,7 +116,7 @@ describe('generateInitGrpcCode', ()=>{
 describe('generateRequestCode', ()=>{
   it('returns js code', () => {
     const code = generateRequestCode('HelloRequest', {users: 'User'})
-    expect(code).toBe(`const req = createRequest(params, HelloRequest, {"users":"User"})`)
+    expect(code).toBe(`const req = createRequest(params, HelloRequest, {users:HelloRequest.User})`)
   })
 })
 
@@ -130,11 +130,11 @@ describe('generateActionsCode', ()=>{
     const code = generateActionsCode(actions, models)
     expect(code).toBe(
 `export function sayHello (params, options) {
-  const req = createRequest(params, HelloRequest, {"users":"User"})
+  const req = createRequest(params, HelloRequest, {users:HelloRequest.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
-      params,
+      req,
     })
     .then((res)=>{
       if (options && options.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
@@ -155,13 +155,14 @@ describe('generateCode', ()=>{
     const json = toJSON(proto)
     const services = getServices(json)
     const messages = getMessages(json)
+    const models = getModels(messages)
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services)
     const code = generateCode({
       protoFileNameWithoutExt,
       mutationTypes,
       actions,
-      messages,
+      models,
       endpoint: 'http://localhost:8080/',
     })
     expect(_.isString(code)).toBeTruthy()

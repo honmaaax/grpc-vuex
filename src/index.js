@@ -8,6 +8,7 @@ import {
   toJSON,
   getServices,
   getMessages,
+  getModels,
   getMutationTypes,
   getActions,
 } from './protobuf'
@@ -32,14 +33,14 @@ readFile(protoFilePath)
   .then((json)=>{
     const protoFileNameWithoutExt = path.basename(protoFilePath, '.proto')
     const services = getServices(json)
-    const messages = getMessages(json)
+    const models = getModels(getMessages(json))
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services)
     return {
       protoFileNameWithoutExt,
       mutationTypes,
       actions,
-      messages,
+      models,
       endpoint: 'http://localhost:8080/',
     }
   })
@@ -51,6 +52,7 @@ readFile(protoFilePath)
         entry: tempFilePath,
         output: {
           filename: outputFilePath,
+          libraryTarget: 'commonjs',
         },
         mode: 'development',
         target: 'node',

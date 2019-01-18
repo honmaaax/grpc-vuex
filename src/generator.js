@@ -55,8 +55,12 @@ export function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-export function generateRequestCode (message, models) {
-  return `const req = createRequest(params, ${message}, ${JSON.stringify(models)})`
+export function generateRequestCode (message, model) {
+  model = _.chain(model)
+    .map((value, key)=>(`${key}:${message}.${value}`))
+    .join(',')
+    .value()
+  return `const req = createRequest(params, ${message}, {${model}})`
 }
 
 export function generateActionsCode (actions, models) {
@@ -66,7 +70,7 @@ export function generateActionsCode (actions, models) {
   return grpc.call({
       client: ${client},
       method: '${method}',
-      params,
+      req,
     })
     .then((res)=>{
       if (options && options.hasMutation) context.commit(types.${mutationType}, res)
@@ -76,12 +80,12 @@ export function generateActionsCode (actions, models) {
   ).join('\n\n')
 }
 
-export function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, messages, endpoint }) {
+export function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, models, endpoint }) {
   return `${generateImportCode(protoFileNameWithoutExt, actions)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(actions, messages)}
+${generateActionsCode(actions, models)}
 `
 }
