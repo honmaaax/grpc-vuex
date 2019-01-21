@@ -6,11 +6,11 @@ export default class GRPC {
     if (endpoint) {
       this.endpoint = endpoint
     } else {
-      throw new Error('Invalid host')
+      throw new Error('Invalid endpoint')
     }
   }
   call({ client, method, req }) {
-    const cl = new client(this.host)
+    const cl = new client(this.endpoint)
     return cl[method](req, this.defaultOptions)
       .catch(this.error)
   }
