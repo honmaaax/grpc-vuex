@@ -8,7 +8,7 @@ export function generateFileByProtoc (protoFilePathAndName) {
   const protoFilePath = path.dirname(protoFilePathAndName) || './'
   const protoFileName =  path.basename(protoFilePathAndName)
   const protoFileNameWithoutExt =  path.basename(protoFileName, '.proto')
-  const outputFilePath = './dist'
+  const outputFilePath = './.grpc-vuex'
   const command = `protoc -I=${protoFilePath} ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
   return new Promise((resolve, reject)=>{
     childProcess.exec(command, (err, stdout, stderr)=>{
@@ -22,8 +22,8 @@ export function generateFileByProtoc (protoFilePathAndName) {
     })
   })
     .then(()=>Promise.all([
-      Promise.promisify(fs.readFile)(`./dist/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
-      Promise.promisify(fs.readFile)(`./dist/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
+      Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
+      Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
     ]))
     .then((codes)=>codes.join('\n\n'))
     .catch((err)=>console.error(err))
@@ -35,8 +35,8 @@ export function generateImportCode (protoFileNameWithoutExt, actions) {
     .uniq()
     .join(', ')
     .value()
-  return `import GRPC from '../src/grpc'
-import { createRequest } from '../src/request'
+  return `import GRPC from './grpc'
+import { createRequest } from './request'
 import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
 import { ${requests} } from './${protoFileNameWithoutExt}_pb'`
 }

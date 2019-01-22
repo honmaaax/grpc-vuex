@@ -154,6 +154,10 @@ var external_path_default = /*#__PURE__*/__webpack_require__.n(external_path_);
 var external_commander_ = __webpack_require__(4);
 var external_commander_default = /*#__PURE__*/__webpack_require__.n(external_commander_);
 
+// EXTERNAL MODULE: external "bluebird"
+var external_bluebird_ = __webpack_require__(1);
+var external_bluebird_default = /*#__PURE__*/__webpack_require__.n(external_bluebird_);
+
 // EXTERNAL MODULE: external "lodash"
 var external_lodash_ = __webpack_require__(0);
 var external_lodash_default = /*#__PURE__*/__webpack_require__.n(external_lodash_);
@@ -166,11 +170,8 @@ var external_webpack_default = /*#__PURE__*/__webpack_require__.n(external_webpa
 var external_fs_ = __webpack_require__(3);
 var external_fs_default = /*#__PURE__*/__webpack_require__.n(external_fs_);
 
-// EXTERNAL MODULE: external "bluebird"
-var external_bluebird_ = __webpack_require__(1);
-var external_bluebird_default = /*#__PURE__*/__webpack_require__.n(external_bluebird_);
-
 // CONCATENATED MODULE: ./src/file.js
+
 
 
 
@@ -182,6 +183,28 @@ function readFile(filePath) {
 function writeFile(outputFilePath, code) {
   return external_bluebird_default.a.promisify(external_fs_default.a.writeFile)(outputFilePath, code)
 }
+
+function copyFile(src, dist) {
+  return readFile(src)
+    .then((contents)=>writeFile(dist, contents))
+}
+
+function makeDir(dirPath) {
+  if ( external_fs_default.a.existsSync(dirPath) ) return external_bluebird_default.a.resolve()
+  return external_bluebird_default.a.promisify(external_fs_default.a.mkdir)(dirPath)
+}
+
+function removeDir(dirPath) {
+  if ( !external_fs_default.a.existsSync(dirPath) ) return external_bluebird_default.a.resolve()
+  return external_bluebird_default.a.promisify(external_fs_default.a.readdir)(dirPath)
+    .then((files)=>{
+      return external_bluebird_default.a.map(files, (file)=>{
+        external_bluebird_default.a.promisify(external_fs_default.a.unlinkSync)(external_path_default.a.resolve(dirPath, file))
+      })
+    })
+    .then(()=>external_bluebird_default.a.promisify(external_fs_default.a.rmdir)(dirPath))
+}
+
 
 // EXTERNAL MODULE: external "protobufjs"
 var external_protobufjs_ = __webpack_require__(5);
@@ -313,7 +336,7 @@ function generateFileByProtoc (protoFilePathAndName) {
   const protoFilePath = external_path_default.a.dirname(protoFilePathAndName) || './'
   const protoFileName =  external_path_default.a.basename(protoFilePathAndName)
   const protoFileNameWithoutExt =  external_path_default.a.basename(protoFileName, '.proto')
-  const outputFilePath = './dist'
+  const outputFilePath = './.grpc-vuex'
   const command = `protoc -I=${protoFilePath} ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
   return new external_bluebird_default.a((resolve, reject)=>{
     external_child_process_default.a.exec(command, (err, stdout, stderr)=>{
@@ -327,8 +350,8 @@ function generateFileByProtoc (protoFilePathAndName) {
     })
   })
     .then(()=>external_bluebird_default.a.all([
-      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./dist/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
-      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./dist/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
+      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
+      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
     ]))
     .then((codes)=>codes.join('\n\n'))
     .catch((err)=>console.error(err))
@@ -340,8 +363,8 @@ function generateImportCode (protoFileNameWithoutExt, actions) {
     .uniq()
     .join(', ')
     .value()
-  return `import GRPC from '../src/grpc'
-import { createRequest } from '../src/request'
+  return `import GRPC from './grpc'
+import { createRequest } from './request'
 import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
 import { ${requests} } from './${protoFileNameWithoutExt}_pb'`
 }
@@ -404,6 +427,7 @@ ${generateActionsCode(actions, models)}
 
 
 
+
 external_commander_default.a
   .usage('<proto_file_path> <output_file_path>')
   .arguments('<proto_file_path> <output_file_path>')
@@ -415,31 +439,48 @@ if (
   throw new Error('Undefined file paths')
 }
 const [ src_protoFilePath, src_outputFilePath ] = external_commander_default.a.args
-const tempFilePath = './dist/_grpc-vuex-index.js'
-readFile(src_protoFilePath)
-  .then(toJSON)
-  .then((json)=>{
-    const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
-    const services = getServices(json)
-    const models = getModels(getMessages(json))
-    const mutationTypes = getMutationTypes(services)
-    const actions = getActions(services)
-    return {
-      protoFileNameWithoutExt,
-      mutationTypes,
-      actions,
-      models,
-      endpoint: 'http://localhost:8080',
-    }
-  })
-  .then(generateCode)
-  .then((code)=>writeFile(tempFilePath, code))
+const src_dirPath = '.grpc-vuex'
+const tempFilePath = external_path_default.a.resolve(src_dirPath, 'index.js')
+makeDir('.grpc-vuex')
+  .then(()=>external_bluebird_default.a.all([
+    external_bluebird_default.a
+      .all([
+        readFile(src_protoFilePath).then(toJSON),
+        generateFileByProtoc(src_protoFilePath),
+      ])
+      .then(([ json ])=>{
+        const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
+        const services = getServices(json)
+        const models = getModels(getMessages(json))
+        const mutationTypes = getMutationTypes(services)
+        const actions = getActions(services)
+        return {
+          protoFileNameWithoutExt,
+          mutationTypes,
+          actions,
+          models,
+          endpoint: 'http://localhost:8080',
+        }
+      })
+      .then(generateCode)
+      .then((code)=>writeFile(tempFilePath, code)),
+    external_bluebird_default.a.map([
+      'case.js',
+      'grpc.js',
+      'request.js',
+      'type.js',
+    ], (srcPath)=>copyFile(
+      external_path_default.a.resolve('node_modules/grpc-vuex/src', srcPath),
+      external_path_default.a.resolve(src_dirPath, srcPath)
+    )),
+  ]))
   .then(()=>{
-    return new Promise((resolve, reject)=>{
+    return new external_bluebird_default.a((resolve, reject)=>{
       external_webpack_default()({
         entry: tempFilePath,
         output: {
-          filename: src_outputFilePath,
+          filename: external_path_default.a.basename(src_outputFilePath),
+          path: external_path_default.a.resolve(external_path_default.a.dirname(src_outputFilePath)),
           libraryTarget: 'commonjs',
         },
         mode: 'development',
@@ -454,6 +495,7 @@ readFile(src_protoFilePath)
       })
     })
   })
+  .then(()=>removeDir(src_dirPath))
   .catch((err)=>console.error(err))
   
 
