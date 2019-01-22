@@ -1,6 +1,6 @@
 {
   "name": "grpc-vuex",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "JavaScript (Vuex) code generator with grpc-web",
   "bin": {
     "grpc-vuex": "bin/grpc-vuex.sh"
