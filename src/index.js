@@ -16,6 +16,7 @@ import {
 import {
   generateFileByProtoc,
   generateCode,
+  generateDtsCode,
 } from './generator'
 
 program
@@ -41,19 +42,29 @@ makeDir('.grpc-vuex')
       .then(([ json ])=>{
         const protoFileNameWithoutExt = path.basename(protoFilePath, '.proto')
         const services = getServices(json)
-        const models = getModels(getMessages(json))
+        const messages = getMessages(json)
+        const models = getModels(messages)
         const mutationTypes = getMutationTypes(services)
         const actions = getActions(services)
-        return {
+        const code = generateCode({
           protoFileNameWithoutExt,
           mutationTypes,
           actions,
           models,
           endpoint: 'http://localhost:8080',
-        }
-      })
-      .then(generateCode)
-      .then((code)=>writeFile(tempFilePath, code)),
+        })
+        const dtsCode = generateDtsCode(messages, actions)
+        return Promise.all([
+          writeFile(tempFilePath, code),
+          writeFile(
+            path.resolve(
+              path.dirname(outputFilePath),
+              path.basename(outputFilePath, '.js') + '.d.ts'
+            ),
+            dtsCode
+          ),
+        ])
+      }),
     Promise.map([
       'case.js',
       'grpc.js',

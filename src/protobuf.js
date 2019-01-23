@@ -70,13 +70,14 @@ export function getMutationTypes(services) {
 export function getActions(services) {
   return _.chain(services)
     .map(({ methods }, serviceName)=>{
-      return _.map(methods, ({ requestType }, methodName)=>{
+      return _.map(methods, ({ requestType, responseType }, methodName)=>{
         const name = Case.camel(methodName)
         return {
           name,
           client: `${serviceName}PromiseClient`,
           method: name,
           message: requestType,
+          response: responseType,
           mutationType: Case.constant(`${serviceName}-${methodName}`),
         }
       })

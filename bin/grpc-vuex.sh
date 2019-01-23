@@ -287,13 +287,14 @@ function getMutationTypes(services) {
 function getActions(services) {
   return external_lodash_default.a.chain(services)
     .map(({ methods }, serviceName)=>{
-      return external_lodash_default.a.map(methods, ({ requestType }, methodName)=>{
+      return external_lodash_default.a.map(methods, ({ requestType, responseType }, methodName)=>{
         const name = external_case_default.a.camel(methodName)
         return {
           name,
           client: `${serviceName}PromiseClient`,
           method: name,
           message: requestType,
+          response: responseType,
           mutationType: external_case_default.a.constant(`${serviceName}-${methodName}`),
         }
       })
@@ -401,6 +402,7 @@ function generateActionsCode (actions, models) {
       req,
     })
     .then((res)=>{
+      res = res.toObject()
       if (options && options.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
@@ -417,6 +419,37 @@ ${generateInitGrpcCode(endpoint)}
 ${generateActionsCode(actions, models)}
 `
 }
+
+function generateDtsCode (messages, actions) {
+  const interfaces = external_lodash_default.a.chain(messages)
+    .map(({ fields }, name)=>{
+      fields = external_lodash_default.a.chain(fields)
+        .map(({ type, rule }, name)=>{
+          const isArray = (rule === 'repeated')
+          type = {
+            'int32': 'number',
+          }[type] || type
+          return {
+            name,
+            type: `${type}${isArray ? '[]': ''}`,
+          }
+        })
+        .map(({ type, name })=>`  ${name}?:${type};`)
+        .join('\n')
+        .value()
+      return `interface ${name} {\n${fields}\n}`
+    })
+    .join('\n')
+    .value()
+  const functions = external_lodash_default.a.chain(actions)
+    .map(({ name, message, response })=>
+      `export function ${name}(param:${message}):Promise<${response}>;`
+    )
+    .join('\n')
+    .value()
+  return `${interfaces}\n${functions}`
+}
+
 // CONCATENATED MODULE: ./src/index.js
 
 
@@ -451,19 +484,29 @@ makeDir('.grpc-vuex')
       .then(([ json ])=>{
         const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
         const services = getServices(json)
-        const models = getModels(getMessages(json))
+        const messages = getMessages(json)
+        const models = getModels(messages)
         const mutationTypes = getMutationTypes(services)
         const actions = getActions(services)
-        return {
+        const code = generateCode({
           protoFileNameWithoutExt,
           mutationTypes,
           actions,
           models,
           endpoint: 'http://localhost:8080',
-        }
-      })
-      .then(generateCode)
-      .then((code)=>writeFile(tempFilePath, code)),
+        })
+        const dtsCode = generateDtsCode(messages, actions)
+        return external_bluebird_default.a.all([
+          writeFile(tempFilePath, code),
+          writeFile(
+            external_path_default.a.resolve(
+              external_path_default.a.dirname(src_outputFilePath),
+              external_path_default.a.basename(src_outputFilePath, '.js') + '.d.ts'
+            ),
+            dtsCode
+          ),
+        ])
+      }),
     external_bluebird_default.a.map([
       'case.js',
       'grpc.js',

@@ -73,6 +73,7 @@ export function generateActionsCode (actions, models) {
       req,
     })
     .then((res)=>{
+      res = res.toObject()
       if (options && options.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
@@ -88,4 +89,34 @@ ${generateMutationTypesCode(mutationTypes)}
 ${generateInitGrpcCode(endpoint)}
 ${generateActionsCode(actions, models)}
 `
+}
+
+export function generateDtsCode (messages, actions) {
+  const interfaces = _.chain(messages)
+    .map(({ fields }, name)=>{
+      fields = _.chain(fields)
+        .map(({ type, rule }, name)=>{
+          const isArray = (rule === 'repeated')
+          type = {
+            'int32': 'number',
+          }[type] || type
+          return {
+            name,
+            type: `${type}${isArray ? '[]': ''}`,
+          }
+        })
+        .map(({ type, name })=>`  ${name}?:${type};`)
+        .join('\n')
+        .value()
+      return `interface ${name} {\n${fields}\n}`
+    })
+    .join('\n')
+    .value()
+  const functions = _.chain(actions)
+    .map(({ name, message, response })=>
+      `export function ${name}(param:${message}):Promise<${response}>;`
+    )
+    .join('\n')
+    .value()
+  return `${interfaces}\n${functions}`
 }

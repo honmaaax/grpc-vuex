@@ -6,20 +6,16 @@ service Greeter {
   rpc SayHello (HelloRequest) returns (HelloReply);
 }
 
+message User {
+  string name = 1;
+  int32 age = 2;
+  repeated string children = 3;
+}
+
 message HelloRequest {
-  message User {
-    string name = 1;
-    int32 age = 2;
-    repeated string children = 3;
-  }
   repeated User users = 1;
 }
 
 message HelloReply {
-  message User {
-    string name = 1;
-    int32 age = 2;
-    repeated string children = 3;
-  }
   repeated User users = 1;
 }

@@ -19,6 +19,7 @@ import {
   generateActionsCode,
   generateFileByProtoc,
   generateCode,
+  generateDtsCode,
 } from '../src/generator'
 
 const proto = `
@@ -30,21 +31,17 @@ const proto = `
     rpc SayHello (HelloRequest) returns (HelloReply);
   }
 
+  message User {
+    string name = 1;
+    int32 age = 2;
+    repeated string children = 3;
+  }
+
   message HelloRequest {
-    message User {
-      string name = 1;
-      int32 age = 2;
-      repeated string children = 3;
-    }
     repeated User users = 1;
   }
 
   message HelloReply {
-    message User {
-      string name = 1;
-      int32 age = 2;
-      repeated string children = 3;
-    }
     repeated User users = 1;
   }
 `
@@ -143,6 +140,7 @@ describe('generateActionsCode', ()=>{
       req,
     })
     .then((res)=>{
+      res = res.toObject()
       if (options && options.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -172,5 +170,27 @@ describe('generateCode', ()=>{
       endpoint: 'http://localhost:8080/',
     })
     expect(_.isString(code)).toBeTruthy()
+  })
+})
+
+describe('generateDtsCode', ()=>{
+  it('returns js code', () => {
+    const json = toJSON(proto)
+    const services = getServices(json)
+    const messages = getMessages(json)
+    const actions = getActions(services)
+    expect(generateDtsCode(messages, actions)).toBe(
+`interface User {
+  name?:string;
+  age?:number;
+  children?:string[];
+}
+interface HelloRequest {
+  users?:User[];
+}
+interface HelloReply {
+  users?:User[];
+}
+export function sayHello(param:HelloRequest):Promise<HelloReply>;`)
   })
 })
