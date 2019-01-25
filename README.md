@@ -4,7 +4,7 @@ JavaScript (Vuex) code generator with grpc-web
 
 
 ## Install
-`npm i -g swagger2vuex` or `yarn global add swagger2vuex`
+`npm i -g grpc-vuex` or `yarn global add grpc-vuex`
 
 ### Dependencies (Required!)
 protoc  
