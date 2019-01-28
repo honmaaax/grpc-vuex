@@ -38,7 +38,7 @@ export function generateImportCode (protoFileNameWithoutExt, actions) {
   return `import GRPC from './grpc'
 import { createRequest } from './request'
 import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
-import { ${requests} } from './${protoFileNameWithoutExt}_pb'`
+import ${protoFileNameWithoutExt} from './${protoFileNameWithoutExt}_pb'`
 }
 
 export function generateMutationTypesCode (mutationTypes) {
@@ -55,18 +55,18 @@ export function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-export function generateRequestCode (message, model) {
+export function generateRequestCode (packageName, message, model) {
   model = _.chain(model)
-    .map((value, key)=>(`${key}:${message}.${value}`))
+    .map((value, key)=>(`${key}:${packageName}.${value}`))
     .join(',')
     .value()
-  return `const req = createRequest(params, ${message}, {${model}})`
+  return `const req = createRequest(params, ${packageName}.${message}, {${model}})`
 }
 
-export function generateActionsCode (actions, models) {
+export function generateActionsCode (packageName, actions, models) {
   return actions.map(({ name, client, method, message, mutationType })=>
 `export function ${name} (params, options) {
-  ${generateRequestCode(message, models[message])}
+  ${generateRequestCode(packageName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -87,7 +87,7 @@ export function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions,
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(actions, models)}
+${generateActionsCode(protoFileNameWithoutExt, actions, models)}
 `
 }
 

@@ -89,7 +89,7 @@ describe('generateImportCode', ()=>{
 `import GRPC from './grpc'
 import { createRequest } from './request'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
-import { HelloRequest } from './helloworld_pb'`
+import helloworld from './helloworld_pb'`
     )
   })
 })
@@ -118,8 +118,8 @@ describe('generateInitGrpcCode', ()=>{
 
 describe('generateRequestCode', ()=>{
   it('returns js code', () => {
-    const code = generateRequestCode('HelloRequest', {users: 'User'})
-    expect(code).toBe(`const req = createRequest(params, HelloRequest, {users:HelloRequest.User})`)
+    const code = generateRequestCode('helloworld', 'HelloRequest', {users: 'User'})
+    expect(code).toBe(`const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})`)
   })
 })
 
@@ -130,10 +130,10 @@ describe('generateActionsCode', ()=>{
     const messages = getMessages(json)
     const models = getModels(messages)
     const actions = getActions(services)
-    const code = generateActionsCode(actions, models)
+    const code = generateActionsCode('helloworld', actions, models)
     expect(code).toBe(
 `export function sayHello (params, options) {
-  const req = createRequest(params, HelloRequest, {users:HelloRequest.User})
+  const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',

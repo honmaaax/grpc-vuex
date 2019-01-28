@@ -10,7 +10,7 @@ describe('createRequest', ()=>{
     const params = {
       users: []
     }
-    const models = {users: Helloworld.HelloRequest.User}
+    const models = {users: Helloworld.User}
     const req = createRequest(params, Helloworld.HelloRequest, models)
     expect(req.toObject()).toEqual({
       usersList: []
@@ -33,7 +33,7 @@ describe('createRequest', ()=>{
         }
       ]
     }
-    const models = {users: Helloworld.HelloRequest.User}
+    const models = {users: Helloworld.User}
     const req = createRequest(params, Helloworld.HelloRequest, models)
     expect(req.toObject()).toEqual({
       usersList: [
@@ -71,6 +71,7 @@ describe('createRequest', ()=>{
     const models = {
       users: fewcollection.User,
       pagenation: fewcollection.Pagenation,
+
     }
     const req = createRequest(params, fewcollection.GetUsersRequest, models)
     expect(req.toObject()).toEqual({

@@ -367,7 +367,7 @@ function generateImportCode (protoFileNameWithoutExt, actions) {
   return `import GRPC from './grpc'
 import { createRequest } from './request'
 import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
-import { ${requests} } from './${protoFileNameWithoutExt}_pb'`
+import ${protoFileNameWithoutExt} from './${protoFileNameWithoutExt}_pb'`
 }
 
 function generateMutationTypesCode (mutationTypes) {
@@ -384,18 +384,18 @@ function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-function generateRequestCode (message, model) {
+function generateRequestCode (packageName, message, model) {
   model = external_lodash_default.a.chain(model)
-    .map((value, key)=>(`${key}:${message}.${value}`))
+    .map((value, key)=>(`${key}:${packageName}.${value}`))
     .join(',')
     .value()
-  return `const req = createRequest(params, ${message}, {${model}})`
+  return `const req = createRequest(params, ${packageName}.${message}, {${model}})`
 }
 
-function generateActionsCode (actions, models) {
+function generateActionsCode (packageName, actions, models) {
   return actions.map(({ name, client, method, message, mutationType })=>
 `export function ${name} (params, options) {
-  ${generateRequestCode(message, models[message])}
+  ${generateRequestCode(packageName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -416,7 +416,7 @@ function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, models
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(actions, models)}
+${generateActionsCode(protoFileNameWithoutExt, actions, models)}
 `
 }
 
@@ -478,8 +478,8 @@ makeDir('.grpc-vuex')
   .then(()=>external_bluebird_default.a.all([
     external_bluebird_default.a
       .all([
-        readFile(src_protoFilePath).then(toJSON),
-        generateFileByProtoc(src_protoFilePath),
+        readFile(src_protoFilePath).then(toJSON), // [TODO] 複数読み込み
+        generateFileByProtoc(src_protoFilePath), // [TODO] *.protoをディレクトリを含むパスで指定
       ])
       .then(([ json ])=>{
         const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
@@ -488,15 +488,15 @@ makeDir('.grpc-vuex')
         const models = getModels(messages)
         const mutationTypes = getMutationTypes(services)
         const actions = getActions(services)
-        const code = generateCode({
+        const code = generateCode({ // [TODO] 複数対応、パッケージ名追加
           protoFileNameWithoutExt,
           mutationTypes,
           actions,
           models,
           endpoint: 'http://localhost:8080',
         })
-        const dtsCode = generateDtsCode(messages, actions)
-        return external_bluebird_default.a.all([
+        const dtsCode = generateDtsCode(messages, actions) // [TODO] 複数対応、パッケージ名追加
+        return external_bluebird_default.a.all([ // ここから下は変更なし
           writeFile(tempFilePath, code),
           writeFile(
             external_path_default.a.resolve(

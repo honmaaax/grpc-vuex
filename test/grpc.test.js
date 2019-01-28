@@ -2,7 +2,7 @@ import _ from 'lodash'
 
 import GRPC from '../src/grpc'
 import { GreeterPromiseClient } from './grpc/helloworld_grpc_web_pb'
-import { HelloRequest } from './grpc/helloworld_pb'
+import helloworld from './grpc/helloworld_pb'
 
 const endpoint = 'http://localhost:8080'
 const proto = `
@@ -48,9 +48,9 @@ describe('call()', ()=>{
     grpc = new GRPC(endpoint)
   })
   it('returns an instance', () => {
-    const req = new HelloRequest()
+    const req = new helloworld.HelloRequest()
     const users = [0].map(()=>{
-      const r = new HelloRequest.User()
+      const r = new helloworld.User()
       r.setName('puyo')
       r.setAge(999)
       r.setChildrenList(['uuu'])
