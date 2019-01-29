@@ -464,6 +464,7 @@ function generateDtsCode (messages, actions) {
 external_commander_default.a
   .usage('<proto_file_path> <output_file_path>')
   .arguments('<proto_file_path> <output_file_path>')
+  .option('-e, --endpoint <url>', 'Add endpoint')
   .parse(process.argv)
 if (
   !external_lodash_default.a.isArray(external_commander_default.a.args) ||
@@ -478,8 +479,8 @@ makeDir('.grpc-vuex')
   .then(()=>external_bluebird_default.a.all([
     external_bluebird_default.a
       .all([
-        readFile(src_protoFilePath).then(toJSON), // [TODO] 複数読み込み
-        generateFileByProtoc(src_protoFilePath), // [TODO] *.protoをディレクトリを含むパスで指定
+        readFile(src_protoFilePath).then(toJSON),
+        generateFileByProtoc(src_protoFilePath),
       ])
       .then(([ json ])=>{
         const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
@@ -488,15 +489,15 @@ makeDir('.grpc-vuex')
         const models = getModels(messages)
         const mutationTypes = getMutationTypes(services)
         const actions = getActions(services)
-        const code = generateCode({ // [TODO] 複数対応、パッケージ名追加
+        const code = generateCode({
           protoFileNameWithoutExt,
           mutationTypes,
           actions,
           models,
-          endpoint: 'http://localhost:8080',
+          endpoint: external_commander_default.a.endpoint || 'http://localhost:8080',
         })
-        const dtsCode = generateDtsCode(messages, actions) // [TODO] 複数対応、パッケージ名追加
-        return external_bluebird_default.a.all([ // ここから下は変更なし
+        const dtsCode = generateDtsCode(messages, actions)
+        return external_bluebird_default.a.all([
           writeFile(tempFilePath, code),
           writeFile(
             external_path_default.a.resolve(

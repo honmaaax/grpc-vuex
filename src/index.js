@@ -22,6 +22,7 @@ import {
 program
   .usage('<proto_file_path> <output_file_path>')
   .arguments('<proto_file_path> <output_file_path>')
+  .option('-e, --endpoint <url>', 'Add endpoint')
   .parse(process.argv)
 if (
   !_.isArray(program.args) ||
@@ -51,7 +52,7 @@ makeDir('.grpc-vuex')
           mutationTypes,
           actions,
           models,
-          endpoint: 'http://localhost:8080',
+          endpoint: program.endpoint || 'http://localhost:8080',
         })
         const dtsCode = generateDtsCode(messages, actions)
         return Promise.all([
