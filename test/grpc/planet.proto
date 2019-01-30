@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package planet;
+
+service PlanetService {
+  rpc CreatePlanet (PlanetRequest) returns (PlanetReply);
+}
+
+message Planet {
+  string name = 1;
+  int32 age = 2;
+  repeated string satellite = 3;
+}
+
+message PlanetRequest {
+  repeated Planet planet = 1;
+}
+
+message PlanetReply {
+  repeated Planet planet = 1;
+}
