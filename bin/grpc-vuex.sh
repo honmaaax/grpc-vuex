@@ -338,7 +338,7 @@ function generateFileByProtoc (protoFilePathAndName) {
   const protoFileName =  external_path_default.a.basename(protoFilePathAndName)
   const protoFileNameWithoutExt =  external_path_default.a.basename(protoFileName, '.proto')
   const outputFilePath = './.grpc-vuex'
-  const command = `protoc -I=${protoFilePath} ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
+  const command = `protoc -I=${protoFilePath}:$GOPATH/src:$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
   return new external_bluebird_default.a((resolve, reject)=>{
     external_child_process_default.a.exec(command, (err, stdout, stderr)=>{
       if (err) {
@@ -355,7 +355,10 @@ function generateFileByProtoc (protoFilePathAndName) {
       external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
     ]))
     .then((codes)=>codes.join('\n\n'))
-    .catch((err)=>console.error(err))
+    .catch((err)=>{
+      console.error(err)
+      throw new Error(err)
+    })
 }
 
 function generateImportCode (protoFileNameWithoutExt, actions) {
