@@ -9,7 +9,7 @@ export function generateFileByProtoc (protoFilePathAndName) {
   const protoFileName =  path.basename(protoFilePathAndName)
   const protoFileNameWithoutExt =  path.basename(protoFileName, '.proto')
   const outputFilePath = './.grpc-vuex'
-  const command = `protoc -I=${protoFilePath} ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
+  const command = `protoc -I=${protoFilePath}:$GOPATH/src:$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis ${protoFileName} --js_out=import_style=commonjs:${outputFilePath} --grpc-web_out=import_style=commonjs,mode=grpcwebtext:${outputFilePath}`
   return new Promise((resolve, reject)=>{
     childProcess.exec(command, (err, stdout, stderr)=>{
       if (err) {
@@ -26,7 +26,10 @@ export function generateFileByProtoc (protoFilePathAndName) {
       Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
     ]))
     .then((codes)=>codes.join('\n\n'))
-    .catch((err)=>console.error(err))
+    .catch((err)=>{
+      console.error(err)
+      throw new Error(err)
+    })
 }
 
 export function generateImportCode (protoFileNameWithoutExt, actions) {

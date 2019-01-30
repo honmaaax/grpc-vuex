@@ -1,6 +1,8 @@
 syntax = "proto3";
 
 package helloworld;
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+import "google/api/annotations.proto";
 
 service Greeter {
   rpc SayHello (HelloRequest) returns (HelloReply);
