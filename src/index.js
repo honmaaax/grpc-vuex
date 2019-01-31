@@ -11,7 +11,6 @@ import {
 import {
   readFile,
   writeFile,
-  copyFile,
   makeDir,
   removeDir,
   getProtocDependencies,

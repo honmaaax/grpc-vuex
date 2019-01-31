@@ -65,6 +65,32 @@ describe('getServices', ()=>{
       }
     })
   })
+  it('returns services object', () => {
+    const proto = `
+    syntax = "proto3";
+
+    package helloworld;
+    
+    message HelloRequest {
+      message User {
+        string name = 1;
+        int32 age = 2;
+        repeated string children = 3;
+      }
+      repeated User users = 1;
+    }
+    
+    message HelloReply {
+      message User {
+        string name = 1;
+        int32 age = 2;
+        repeated string children = 3;
+      }
+      repeated User users = 1;
+    }
+    `
+    expect(getServices(toJSON(proto))).toBeNull()
+  })
 })
 
 describe('getMessages', ()=>{
@@ -156,6 +182,9 @@ describe('getMutationTypes', ()=>{
   it('returns array', () => {
     expect(_.isArray(mutationTypes)).toBeTruthy()
   })
+  it('returns null', () => {
+    expect(getMutationTypes(null)).toBeNull()
+  })
 })
 
 describe('getActions', ()=>{
@@ -167,6 +196,9 @@ describe('getActions', ()=>{
   it('returns array', () => {
     expect(_.isArray(actions)).toBeTruthy()
     expect(_.size(actions)).toBe(1)
+  })
+  it('returns null', () => {
+    expect(getActions(null)).toBeNull()
   })
 })
 

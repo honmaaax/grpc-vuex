@@ -1,6 +1,6 @@
 {
   "name": "grpc-vuex",
-  "version": "0.7.3",
+  "version": "0.7.5",
   "description": "JavaScript (Vuex) code generator with grpc-web",
   "bin": {
     "grpc-vuex": "bin/grpc-vuex.sh"
@@ -10,7 +10,7 @@
     "build": "webpack",
     "watch": "webpack --watch",
     "test": "jest",
-    "test:bin": "rm -rf .grpc-vuex/ && yarn run build && ./bin/grpc-vuex.sh ./dist/test.js ./test/grpc/helloworld.proto ./test/grpc/planet.proto"
+    "test:bin": "rm -rf .grpc-vuex/ && yarn run build && ./bin/grpc-vuex.sh ./dist/test.js ./test/grpc/pbonly.proto ./test/grpc/helloworld.proto ./test/grpc/planet.proto"
   },
   "main": "index.js",
   "repository": "git@github.com:honmaaax/grpc-vuex.git",

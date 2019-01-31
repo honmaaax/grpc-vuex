@@ -22,11 +22,16 @@ export function generateFileByProtoc (protoFilePathAndName) {
       }
     })
   })
-    .then(()=>Promise.all([
-      Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
-      Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
-    ]))
-    .then((codes)=>codes.join('\n\n'))
+    .then(()=>{
+      const funcs = [Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8')]
+      if ( fs.existsSync(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`) ) {
+        funcs.push(Promise.promisify(fs.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'))
+      }
+      return Promise.all(funcs)
+    })
+    .then((codes)=>{
+      return codes.join('\n\n')
+    })
     .catch((err)=>{
       console.error(err)
       throw new Error(err)
@@ -112,6 +117,7 @@ export function generateRequestCode (protoName, message, model) {
 
 export function generateActionsCode (params) {
   return _.chain(params)
+    .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (params, options) {
@@ -137,10 +143,12 @@ export function generateActionsCode (params) {
 export function generateCode (params, endpoint) {
   const mutationTypes = _.chain(params)
     .map('mutationTypes')
+    .compact()
     .flatten()
     .value()
   const protos = _.chain(params)
     .map('actions')
+    .compact()
     .map((actions)=>({
       protoName: actions[0].protoName,
       client: actions[0].client,

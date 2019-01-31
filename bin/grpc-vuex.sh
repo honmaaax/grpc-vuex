@@ -339,7 +339,7 @@ function fromJSON(json) {
 }
 
 function getServices(json) {
-  return external_lodash_default.a.chain(json)
+  const services = external_lodash_default.a.chain(json)
     .result('nested')
     .toArray()
     .first()
@@ -350,6 +350,7 @@ function getServices(json) {
     .compact()
     .fromPairs()
     .value()
+  return (external_lodash_default.a.isEqual(services, {})) ? null : services
 }
 
 function getMessages(json) {
@@ -378,6 +379,7 @@ function getModels(messages) {
 }
 
 function getMutationTypes(services) {
+  if (!services) return null
   return external_lodash_default.a.chain(services)
     .map(({ methods }, serviceName)=>{
       return external_lodash_default.a.map(methods, (value, methodName)=>`${serviceName}-${methodName}`)
@@ -388,6 +390,7 @@ function getMutationTypes(services) {
 }
 
 function getActions(services, protoName) {
+  if (!services) return null
   return external_lodash_default.a.chain(services)
     .map(({ methods }, serviceName)=>{
       return external_lodash_default.a.map(methods, ({ requestType, responseType }, methodName)=>{
@@ -459,11 +462,16 @@ function generateFileByProtoc (protoFilePathAndName) {
       }
     })
   })
-    .then(()=>external_bluebird_default.a.all([
-      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'),
-      external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8'),
-    ]))
-    .then((codes)=>codes.join('\n\n'))
+    .then(()=>{
+      const funcs = [external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_pb.js`, 'utf-8')]
+      if ( external_fs_default.a.existsSync(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`) ) {
+        funcs.push(external_bluebird_default.a.promisify(external_fs_default.a.readFile)(`./.grpc-vuex/${protoFileNameWithoutExt}_grpc_web_pb.js`, 'utf-8'))
+      }
+      return external_bluebird_default.a.all(funcs)
+    })
+    .then((codes)=>{
+      return codes.join('\n\n')
+    })
     .catch((err)=>{
       console.error(err)
       throw new Error(err)
@@ -549,6 +557,7 @@ function generateRequestCode (protoName, message, model) {
 
 function generateActionsCode (params) {
   return external_lodash_default.a.chain(params)
+    .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (params, options) {
@@ -574,10 +583,12 @@ function generateActionsCode (params) {
 function generateCode (params, endpoint) {
   const mutationTypes = external_lodash_default.a.chain(params)
     .map('mutationTypes')
+    .compact()
     .flatten()
     .value()
   const protos = external_lodash_default.a.chain(params)
     .map('actions')
+    .compact()
     .map((actions)=>({
       protoName: actions[0].protoName,
       client: actions[0].client,
@@ -600,6 +611,8 @@ function _generateDtsCode (messages, actions) {
           const isArray = (rule === 'repeated')
           type = {
             'int32': 'number',
+            'int64': 'string',
+            'bool': 'boolean',
           }[type] || type
           return {
             name,

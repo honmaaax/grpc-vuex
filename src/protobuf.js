@@ -19,7 +19,7 @@ export function fromJSON(json) {
 }
 
 export function getServices(json) {
-  return _.chain(json)
+  const services = _.chain(json)
     .result('nested')
     .toArray()
     .first()
@@ -30,6 +30,7 @@ export function getServices(json) {
     .compact()
     .fromPairs()
     .value()
+  return (_.isEqual(services, {})) ? null : services
 }
 
 export function getMessages(json) {
@@ -58,6 +59,7 @@ export function getModels(messages) {
 }
 
 export function getMutationTypes(services) {
+  if (!services) return null
   return _.chain(services)
     .map(({ methods }, serviceName)=>{
       return _.map(methods, (value, methodName)=>`${serviceName}-${methodName}`)
@@ -68,6 +70,7 @@ export function getMutationTypes(services) {
 }
 
 export function getActions(services, protoName) {
+  if (!services) return null
   return _.chain(services)
     .map(({ methods }, serviceName)=>{
       return _.map(methods, ({ requestType, responseType }, methodName)=>{
