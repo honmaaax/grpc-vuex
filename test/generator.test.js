@@ -352,4 +352,45 @@ interface HelloReply {
 export function sayHello(param:HelloRequest):Promise<HelloReply>;`
     )
   })
+  it('returns with imported code', () => {
+    const proto = `
+  syntax = "proto3";
+
+  package helloworld;
+  import "common.proto";
+
+  service Greeter {
+    rpc SayHello (HelloRequest) returns (HelloReply);
+  }
+
+  message HelloRequest {
+    
+  }
+
+  message HelloReply {
+    repeated User users = 1;
+  }
+`
+    const json = toJSON(proto)
+    const services = getServices(json)
+    const messages = getMessages(json)
+    const actions = getActions(services)
+    expect(generateDtsCode([{ messages, actions }, { messages, actions }])).toBe(
+`interface HelloRequest {
+
+}
+interface HelloReply {
+  users?:User[];
+}
+export function sayHello(param:HelloRequest):Promise<HelloReply>;
+
+interface HelloRequest {
+
+}
+interface HelloReply {
+  users?:User[];
+}
+export function sayHello(param:HelloRequest):Promise<HelloReply>;`
+    )
+  })
 })

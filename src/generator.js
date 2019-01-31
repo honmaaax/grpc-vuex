@@ -38,7 +38,7 @@ export function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
     const protoFilePath = path.dirname(file) || './'
     const protoFileName =  path.basename(file)
     const protoFileNameWithoutExt =  path.basename(file, '.proto')
-    const outputFilePath = path.join('./.grpc-vuex', parentDir, protoFilePath)
+    const outputFilePath = path.resolve('./.grpc-vuex', parentDir, protoFilePath)
     const command = `protoc -I=${path.resolve(dir, protoFilePath)}:$GOPATH/src:$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis ${protoFileName} --js_out=import_style=commonjs:${outputFilePath}`
     return Promise.resolve()
       .then(()=>{
@@ -59,7 +59,8 @@ export function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
         })
       })
       .then(()=>{
-        const funcs = [Promise.promisify(fs.readFile)(path.resolve('./.grpc-vuex', protoFilePath, `${protoFileNameWithoutExt}_pb.js`), 'utf-8')]
+        const jsFilePath = path.resolve('./.grpc-vuex', parentDir, protoFilePath, `${protoFileNameWithoutExt}_pb.js`)
+        const funcs = [Promise.promisify(fs.readFile)(jsFilePath, 'utf-8')]
         if (dependencies) {
           funcs.push(generateFileByProtocDependencies(dependencies, protoFilePath))
         }
@@ -162,6 +163,8 @@ function _generateDtsCode (messages, actions) {
           const isArray = (rule === 'repeated')
           type = {
             'int32': 'number',
+            'int64': 'string',
+            'bool': 'boolean',
           }[type] || type
           return {
             name,

@@ -8,7 +8,14 @@ import {
   protoFilePaths,
   endpoint,
 } from './command'
-import { readFile, writeFile, copyFile, makeDir, removeDir } from './file'
+import {
+  readFile,
+  writeFile,
+  copyFile,
+  makeDir,
+  removeDir,
+  getProtocDependencies,
+} from './file'
 import {
   toJSON,
   getServices,
@@ -19,9 +26,15 @@ import {
 } from './protobuf'
 import {
   generateFileByProtoc,
+  generateFileByProtocDependencies,
   generateCode,
   generateDtsCode,
 } from './generator'
+
+import caseJsCode from 'raw-loader!./case'
+import grpcJsCode from 'raw-loader!./grpc'
+import requestJsCode from 'raw-loader!./request'
+import typeJsCode from 'raw-loader!./type'
 
 const dirPath = '.grpc-vuex'
 const tempFilePath = path.resolve(dirPath, 'index.js')
@@ -31,6 +44,9 @@ makeDir('.grpc-vuex')
       .all([
         Promise.map(protoFilePaths, (p)=>readFile(p).then(toJSON)),
         Promise.map(protoFilePaths, generateFileByProtoc),
+        Promise.map(protoFilePaths, (p)=>getProtocDependencies(p))
+          .then(_.compact)
+          .then((list)=>Promise.map(list, (p)=>generateFileByProtocDependencies(p))),
       ])
       .then(([ jsons ])=>{
         const params = jsons.map((json, i)=>{
@@ -44,6 +60,7 @@ makeDir('.grpc-vuex')
             mutationTypes,
             actions,
             models,
+            messages,
           }
         })
         const code = generateCode(params, endpoint)
@@ -60,14 +77,11 @@ makeDir('.grpc-vuex')
         ])
       }),
     Promise.map([
-      'case.js',
-      'grpc.js',
-      'request.js',
-      'type.js',
-    ], (srcPath)=>copyFile(
-      path.resolve('./src', srcPath),
-      path.resolve(dirPath, srcPath)
-    )),
+      ['case.js', caseJsCode],
+      ['grpc.js', grpcJsCode],
+      ['request.js', requestJsCode],
+      ['type.js', typeJsCode],
+    ], ([ srcPath, code ])=>writeFile(path.resolve(dirPath, srcPath), code)),
   ]))
   .then(()=>{
     return new Promise((resolve, reject)=>{

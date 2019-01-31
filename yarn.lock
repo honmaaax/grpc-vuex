@@ -4883,6 +4883,14 @@ randomfill@^1.0.3:
     randombytes "^2.0.5"
     safe-buffer "^5.1.0"
 
+raw-loader@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/raw-loader/-/raw-loader-1.0.0.tgz#3f9889e73dadbda9a424bce79809b4133ad46405"
+  integrity sha512-Uqy5AqELpytJTRxYT4fhltcKPj0TyaEpzJDcGz7DFJi+pQOOi3GjR/DOdxTkTsF+NzhnldIoG6TORaBlInUuqA==
+  dependencies:
+    loader-utils "^1.1.0"
+    schema-utils "^1.0.0"
+
 rc@^1.2.7:
   version "1.2.8"
   resolved "https://registry.yarnpkg.com/rc/-/rc-1.2.8.tgz#cd924bf5200a075b83c188cd6b9e211b7fc0d3ed"
@@ -5153,6 +5161,11 @@ ripemd160@^2.0.0, ripemd160@^2.0.1:
   dependencies:
     hash-base "^3.0.0"
     inherits "^2.0.1"
+
+rmrf@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/rmrf/-/rmrf-2.0.0.tgz#ed9430b72e277f3ca0905adeaa7245eaa6530f86"
+  integrity sha512-r2EtAGFSYCvVqdHe/c/zbrg5rtADrjEvDeiCLmHwSwciZ25M5qE+8inwnsMMEcz5jVrU6Cz9YbR+P5eTc5EYyA==
 
 rsvp@^3.3.3:
   version "3.6.2"

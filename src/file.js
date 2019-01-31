@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import Promise from 'bluebird'
 import _ from 'lodash'
+import rmrf from 'rmrf'
 
 export function readFile(filePath) {
   return Promise.promisify(fs.readFile)(filePath, 'utf-8')
@@ -22,14 +23,10 @@ export function makeDir(dirPath) {
 }
 
 export function removeDir(dirPath) {
-  if ( !fs.existsSync(dirPath) ) return Promise.resolve()
-  return Promise.promisify(fs.readdir)(dirPath)
-    .then((files)=>{
-      return Promise.map(files, (file)=>{
-        Promise.promisify(fs.unlinkSync)(path.resolve(dirPath, file))
-      })
+  return Promise.resolve()
+    .then(()=>{
+      if ( fs.existsSync(dirPath) ) return rmrf(dirPath)
     })
-    .then(()=>Promise.promisify(fs.rmdir)(dirPath))
 }
 
 export function getProtocDependencies(protoFilePathAndName) {
