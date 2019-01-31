@@ -3,7 +3,14 @@ import path from 'path'
 import Promise from 'bluebird'
 import _ from 'lodash'
 
-import { readFile, writeFile, copyFile, makeDir, removeDir } from '../src/file'
+import {
+  readFile,
+  writeFile,
+  copyFile,
+  makeDir,
+  removeDir,
+  getProtocDependencies,
+} from '../src/file'
 
 describe('readFile', ()=>{
   it('returns Promise', () => {
@@ -88,5 +95,33 @@ describe('removeDir', ()=>{
       .then(()=>{
         expect(fs.existsSync(dirPath)).toBeFalsy()
       })
+  })
+})
+
+describe('getProtocDependencies', ()=>{
+  let results;
+  beforeAll(()=>{
+    return getProtocDependencies('./test/grpc/helloworld.proto')
+      .then((r)=>{
+        results = r
+      })
+  })
+  it('returns dependency proto files', ()=>{
+    expect(results).toEqual([
+      {
+        "dir": "/Users/b07781/go/src",
+        "file": "github.com/mwitkow/go-proto-validators/validator.proto"
+      },
+      {
+        "dir": "/Users/b07781/go/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis",
+        "file": "google/api/annotations.proto",
+        "dependencies": [
+          {
+            "dir": "/Users/b07781/go/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis",
+            "file": "google/api/http.proto"
+          },
+        ]
+      }
+    ])
   })
 })

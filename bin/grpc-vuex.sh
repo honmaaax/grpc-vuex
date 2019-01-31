@@ -82,7 +82,7 @@
 /******/
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 9);
+/******/ 	return __webpack_require__(__webpack_require__.s = 11);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -111,9 +111,31 @@ module.exports = require("fs");
 
 /***/ }),
 /* 4 */
-/***/ (function(module, exports) {
+/***/ (function(module, exports, __webpack_require__) {
 
-module.exports = require("commander");
+const program = __webpack_require__(10)
+
+program
+  .usage('<output_file_path> <proto_file_paths ...>')
+  .arguments('<output_file_path> <proto_file_paths ...>')
+  .option('-e, --endpoint <url>', 'Add endpoint')
+  .option('-d, --debug', 'Debug Mode')
+  .parse(process.argv)
+if (
+  !Array.isArray(program.args) ||
+  program.args.length < 2
+) {
+  throw new Error('Undefined file paths')
+}
+const [ outputFilePath, ...protoFilePaths ] = program.args
+const results = {
+  outputFilePath,
+  protoFilePaths,
+  endpoint: program.endpoint || 'http://localhost:8080',
+}
+if (program.debug) console.log(results)
+module.exports = results
+
 
 /***/ }),
 /* 5 */
@@ -131,16 +153,28 @@ module.exports = require("case");
 /* 7 */
 /***/ (function(module, exports) {
 
-module.exports = require("webpack");
+module.exports = require("child_process");
 
 /***/ }),
 /* 8 */
 /***/ (function(module, exports) {
 
-module.exports = require("child_process");
+module.exports = require("webpack");
 
 /***/ }),
 /* 9 */
+/***/ (function(module, exports) {
+
+module.exports = require("mkdirp");
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports) {
+
+module.exports = require("commander");
+
+/***/ }),
+/* 11 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -149,10 +183,6 @@ __webpack_require__.r(__webpack_exports__);
 // EXTERNAL MODULE: external "path"
 var external_path_ = __webpack_require__(2);
 var external_path_default = /*#__PURE__*/__webpack_require__.n(external_path_);
-
-// EXTERNAL MODULE: external "commander"
-var external_commander_ = __webpack_require__(4);
-var external_commander_default = /*#__PURE__*/__webpack_require__.n(external_commander_);
 
 // EXTERNAL MODULE: external "bluebird"
 var external_bluebird_ = __webpack_require__(1);
@@ -163,8 +193,11 @@ var external_lodash_ = __webpack_require__(0);
 var external_lodash_default = /*#__PURE__*/__webpack_require__.n(external_lodash_);
 
 // EXTERNAL MODULE: external "webpack"
-var external_webpack_ = __webpack_require__(7);
+var external_webpack_ = __webpack_require__(8);
 var external_webpack_default = /*#__PURE__*/__webpack_require__.n(external_webpack_);
+
+// EXTERNAL MODULE: ./src/command.js
+var src_command = __webpack_require__(4);
 
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __webpack_require__(3);
@@ -205,7 +238,46 @@ function removeDir(dirPath) {
     .then(()=>external_bluebird_default.a.promisify(external_fs_default.a.rmdir)(dirPath))
 }
 
-
+function getProtocDependencies(protoFilePathAndName) {
+  const protoFilePath = external_path_default.a.dirname(protoFilePathAndName) || './'
+  return external_bluebird_default.a.promisify(external_fs_default.a.readFile)(protoFilePathAndName)
+    .then((buf)=>buf.toString())
+    .then((proto)=>{
+      return external_lodash_default.a.chain(proto.match(/import (?:'([^']+?)'|"([^"]+?)")/g))
+        .map((str)=>str.match(/import (?:'([^']+?)')|(?:"([^"]+?)")/, '$1'))
+        .map((m)=>external_lodash_default.a.nth(m, 2))
+        .value()
+    })
+    .then((files)=>{
+      const dirs = [
+        protoFilePath,
+        `${process.env.GOPATH}/src`,
+        `${process.env.GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis`
+      ]
+      return external_bluebird_default.a.map(dirs, (dir)=>{
+        return external_bluebird_default.a.map(files, (file)=>{
+          return external_bluebird_default.a.promisify(external_fs_default.a.stat)(external_path_default.a.resolve(dir, file))
+            .then(()=>({dir, file}), ()=>{})
+        })
+      })
+    })
+    .then((result)=>{
+      return external_lodash_default.a.chain(result)
+        .flattenDeep()
+        .compact()
+        .value()
+    })
+    .then((files)=>{
+      if (!external_lodash_default.a.size(files)) return null
+      return external_bluebird_default.a.map(files, ({ dir, file })=>{
+        return getProtocDependencies(external_path_default.a.resolve(dir, file))
+          .then((dependencies)=>{
+            if (!dependencies) return { dir, file }
+            return { dir, file, dependencies }
+          })
+      })
+    })
+}
 // EXTERNAL MODULE: external "protobufjs"
 var external_protobufjs_ = __webpack_require__(5);
 var external_protobufjs_default = /*#__PURE__*/__webpack_require__.n(external_protobufjs_);
@@ -284,12 +356,13 @@ function getMutationTypes(services) {
     .value()
 }
 
-function getActions(services) {
+function getActions(services, protoName) {
   return external_lodash_default.a.chain(services)
     .map(({ methods }, serviceName)=>{
       return external_lodash_default.a.map(methods, ({ requestType, responseType }, methodName)=>{
         const name = external_case_default.a.camel(methodName)
         return {
+          protoName,
           name,
           client: `${serviceName}PromiseClient`,
           method: name,
@@ -323,10 +396,15 @@ function revertNames(res, schemas, schema, types) {
   }
 }
 // EXTERNAL MODULE: external "child_process"
-var external_child_process_ = __webpack_require__(8);
+var external_child_process_ = __webpack_require__(7);
 var external_child_process_default = /*#__PURE__*/__webpack_require__.n(external_child_process_);
 
+// EXTERNAL MODULE: external "mkdirp"
+var external_mkdirp_ = __webpack_require__(9);
+var external_mkdirp_default = /*#__PURE__*/__webpack_require__.n(external_mkdirp_);
+
 // CONCATENATED MODULE: ./src/generator.js
+
 
 
 
@@ -361,16 +439,58 @@ function generateFileByProtoc (protoFilePathAndName) {
     })
 }
 
-function generateImportCode (protoFileNameWithoutExt, actions) {
-  const requests = external_lodash_default.a.chain(actions)
-    .map(({ message })=>message)
-    .uniq()
-    .join(', ')
-    .value()
+function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
+  return external_bluebird_default.a.map(protoFiles, ({ dir, file, dependencies })=>{
+    const protoFilePath = external_path_default.a.dirname(file) || './'
+    const protoFileName =  external_path_default.a.basename(file)
+    const protoFileNameWithoutExt =  external_path_default.a.basename(file, '.proto')
+    const outputFilePath = external_path_default.a.join('./.grpc-vuex', parentDir, protoFilePath)
+    const command = `protoc -I=${external_path_default.a.resolve(dir, protoFilePath)}:$GOPATH/src:$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis ${protoFileName} --js_out=import_style=commonjs:${outputFilePath}`
+    return external_bluebird_default.a.resolve()
+      .then(()=>{
+        if (external_fs_default.a.existsSync(outputFilePath)) return;
+        return external_bluebird_default.a.promisify(external_mkdirp_default.a)(outputFilePath)
+      })
+      .then(()=>{
+        return new external_bluebird_default.a((resolve, reject)=>{
+          external_child_process_default.a.exec(command, (err, stdout, stderr)=>{
+            if (err) {
+              reject(err)
+            } else if (stderr) {
+              reject(stderr)
+            } else {
+              resolve(stdout)
+            }
+          })
+        })
+      })
+      .then(()=>{
+        const funcs = [external_bluebird_default.a.promisify(external_fs_default.a.readFile)(external_path_default.a.resolve('./.grpc-vuex', protoFilePath, `${protoFileNameWithoutExt}_pb.js`), 'utf-8')]
+        if (dependencies) {
+          funcs.push(generateFileByProtocDependencies(dependencies, protoFilePath))
+        }
+        return external_bluebird_default.a.all(funcs)
+      })
+      .then((codes)=>{
+        return external_lodash_default.a.chain(codes)
+          .flattenDeep()
+          .join('\n')
+          .value()
+      })
+      .catch((err)=>{
+        console.error(err)
+        throw new Error(err)
+      })
+  })
+}
+
+function generateImportCode (protos) {
   return `import GRPC from './grpc'
 import { createRequest } from './request'
-import { ${actions[0].client} } from './${protoFileNameWithoutExt}_grpc_web_pb'
-import ${protoFileNameWithoutExt} from './${protoFileNameWithoutExt}_pb'`
+${protos.map(({ protoName, client })=>
+`import { ${client} } from './${protoName}_grpc_web_pb'
+import ${protoName} from './${protoName}_pb'`
+).join('\n')}`
 }
 
 function generateMutationTypesCode (mutationTypes) {
@@ -387,18 +507,20 @@ function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-function generateRequestCode (packageName, message, model) {
+function generateRequestCode (protoName, message, model) {
   model = external_lodash_default.a.chain(model)
-    .map((value, key)=>(`${key}:${packageName}.${value}`))
+    .map((value, key)=>(`${key}:${protoName}.${value}`))
     .join(',')
     .value()
-  return `const req = createRequest(params, ${packageName}.${message}, {${model}})`
+  return `const req = createRequest(params, ${protoName}.${message}, {${model}})`
 }
 
-function generateActionsCode (packageName, actions, models) {
-  return actions.map(({ name, client, method, message, mutationType })=>
+function generateActionsCode (params) {
+  return external_lodash_default.a.chain(params)
+    .map(({ actions, models })=>{
+      return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (params, options) {
-  ${generateRequestCode(packageName, message, models[message])}
+  ${generateRequestCode(protoName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -410,20 +532,35 @@ function generateActionsCode (packageName, actions, models) {
       return res
     })
 }`
-  ).join('\n\n')
+      )
+    })
+    .flatten()
+    .join('\n')
+    .value()
 }
 
-function generateCode ({ protoFileNameWithoutExt, mutationTypes, actions, models, endpoint }) {
-  return `${generateImportCode(protoFileNameWithoutExt, actions)}
+function generateCode (params, endpoint) {
+  const mutationTypes = external_lodash_default.a.chain(params)
+    .map('mutationTypes')
+    .flatten()
+    .value()
+  const protos = external_lodash_default.a.chain(params)
+    .map('actions')
+    .map((actions)=>({
+      protoName: actions[0].protoName,
+      client: actions[0].client,
+    }))
+    .value()
+  return `${generateImportCode(protos)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(protoFileNameWithoutExt, actions, models)}
+${generateActionsCode(params)}
 `
 }
 
-function generateDtsCode (messages, actions) {
+function _generateDtsCode (messages, actions) {
   const interfaces = external_lodash_default.a.chain(messages)
     .map(({ fields }, name)=>{
       fields = external_lodash_default.a.chain(fields)
@@ -453,6 +590,13 @@ function generateDtsCode (messages, actions) {
   return `${interfaces}\n${functions}`
 }
 
+function generateDtsCode(params) {
+  return external_lodash_default.a.chain(params)
+    .map(({ messages, actions })=>_generateDtsCode(messages, actions))
+    .join('\n\n')
+    .value()
+}
+
 // CONCATENATED MODULE: ./src/index.js
 
 
@@ -464,48 +608,37 @@ function generateDtsCode (messages, actions) {
 
 
 
-external_commander_default.a
-  .usage('<proto_file_path> <output_file_path>')
-  .arguments('<proto_file_path> <output_file_path>')
-  .option('-e, --endpoint <url>', 'Add endpoint')
-  .parse(process.argv)
-if (
-  !external_lodash_default.a.isArray(external_commander_default.a.args) ||
-  external_lodash_default.a.size(external_commander_default.a.args) !== 2
-) {
-  throw new Error('Undefined file paths')
-}
-const [ src_protoFilePath, src_outputFilePath ] = external_commander_default.a.args
 const src_dirPath = '.grpc-vuex'
 const tempFilePath = external_path_default.a.resolve(src_dirPath, 'index.js')
 makeDir('.grpc-vuex')
   .then(()=>external_bluebird_default.a.all([
     external_bluebird_default.a
       .all([
-        readFile(src_protoFilePath).then(toJSON),
-        generateFileByProtoc(src_protoFilePath),
+        external_bluebird_default.a.map(src_command["protoFilePaths"], (p)=>readFile(p).then(toJSON)),
+        external_bluebird_default.a.map(src_command["protoFilePaths"], generateFileByProtoc),
       ])
-      .then(([ json ])=>{
-        const protoFileNameWithoutExt = external_path_default.a.basename(src_protoFilePath, '.proto')
-        const services = getServices(json)
-        const messages = getMessages(json)
-        const models = getModels(messages)
-        const mutationTypes = getMutationTypes(services)
-        const actions = getActions(services)
-        const code = generateCode({
-          protoFileNameWithoutExt,
-          mutationTypes,
-          actions,
-          models,
-          endpoint: external_commander_default.a.endpoint || 'http://localhost:8080',
+      .then(([ jsons ])=>{
+        const params = jsons.map((json, i)=>{
+          const protoName = external_path_default.a.basename(src_command["protoFilePaths"][i], '.proto')
+          const services = getServices(json)
+          const messages = getMessages(json)
+          const models = getModels(messages)
+          const mutationTypes = getMutationTypes(services)
+          const actions = getActions(services, protoName)
+          return {
+            mutationTypes,
+            actions,
+            models,
+          }
         })
-        const dtsCode = generateDtsCode(messages, actions)
+        const code = generateCode(params, src_command["endpoint"])
+        const dtsCode = generateDtsCode(params)
         return external_bluebird_default.a.all([
           writeFile(tempFilePath, code),
           writeFile(
             external_path_default.a.resolve(
-              external_path_default.a.dirname(src_outputFilePath),
-              external_path_default.a.basename(src_outputFilePath, '.js') + '.d.ts'
+              external_path_default.a.dirname(src_command["outputFilePath"]),
+              external_path_default.a.basename(src_command["outputFilePath"], '.js') + '.d.ts'
             ),
             dtsCode
           ),
@@ -517,7 +650,7 @@ makeDir('.grpc-vuex')
       'request.js',
       'type.js',
     ], (srcPath)=>copyFile(
-      external_path_default.a.resolve('node_modules/grpc-vuex/src', srcPath),
+      external_path_default.a.resolve('./src', srcPath),
       external_path_default.a.resolve(src_dirPath, srcPath)
     )),
   ]))
@@ -526,8 +659,8 @@ makeDir('.grpc-vuex')
       external_webpack_default()({
         entry: tempFilePath,
         output: {
-          filename: external_path_default.a.basename(src_outputFilePath),
-          path: external_path_default.a.resolve(external_path_default.a.dirname(src_outputFilePath)),
+          filename: external_path_default.a.basename(src_command["outputFilePath"]),
+          path: external_path_default.a.resolve(external_path_default.a.dirname(src_command["outputFilePath"])),
           libraryTarget: 'commonjs',
         },
         mode: 'development',

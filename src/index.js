@@ -1,9 +1,13 @@
 import path from 'path'
-import program from 'commander'
 import Promise from 'bluebird'
 import _ from 'lodash'
 import webpack from 'webpack'
 
+import {
+  outputFilePath,
+  protoFilePaths,
+  endpoint,
+} from './command'
 import { readFile, writeFile, copyFile, makeDir, removeDir } from './file'
 import {
   toJSON,
@@ -19,42 +23,31 @@ import {
   generateDtsCode,
 } from './generator'
 
-program
-  .usage('<proto_file_path> <output_file_path>')
-  .arguments('<proto_file_path> <output_file_path>')
-  .option('-e, --endpoint <url>', 'Add endpoint')
-  .parse(process.argv)
-if (
-  !_.isArray(program.args) ||
-  _.size(program.args) !== 2
-) {
-  throw new Error('Undefined file paths')
-}
-const [ protoFilePath, outputFilePath ] = program.args
 const dirPath = '.grpc-vuex'
 const tempFilePath = path.resolve(dirPath, 'index.js')
 makeDir('.grpc-vuex')
   .then(()=>Promise.all([
     Promise
       .all([
-        readFile(protoFilePath).then(toJSON),
-        generateFileByProtoc(protoFilePath),
+        Promise.map(protoFilePaths, (p)=>readFile(p).then(toJSON)),
+        Promise.map(protoFilePaths, generateFileByProtoc),
       ])
-      .then(([ json ])=>{
-        const protoFileNameWithoutExt = path.basename(protoFilePath, '.proto')
-        const services = getServices(json)
-        const messages = getMessages(json)
-        const models = getModels(messages)
-        const mutationTypes = getMutationTypes(services)
-        const actions = getActions(services)
-        const code = generateCode({
-          protoFileNameWithoutExt,
-          mutationTypes,
-          actions,
-          models,
-          endpoint: program.endpoint || 'http://localhost:8080',
+      .then(([ jsons ])=>{
+        const params = jsons.map((json, i)=>{
+          const protoName = path.basename(protoFilePaths[i], '.proto')
+          const services = getServices(json)
+          const messages = getMessages(json)
+          const models = getModels(messages)
+          const mutationTypes = getMutationTypes(services)
+          const actions = getActions(services, protoName)
+          return {
+            mutationTypes,
+            actions,
+            models,
+          }
         })
-        const dtsCode = generateDtsCode(messages, actions)
+        const code = generateCode(params, endpoint)
+        const dtsCode = generateDtsCode(params)
         return Promise.all([
           writeFile(tempFilePath, code),
           writeFile(
@@ -72,7 +65,7 @@ makeDir('.grpc-vuex')
       'request.js',
       'type.js',
     ], (srcPath)=>copyFile(
-      path.resolve('node_modules/grpc-vuex/src', srcPath),
+      path.resolve('./src', srcPath),
       path.resolve(dirPath, srcPath)
     )),
   ]))

@@ -16,13 +16,13 @@ https://github.com/grpc/grpc-web#code-generator-plugin
 
 
 ## Run
-`grpc-vuex <proto_file_path> <output_file_path>`
+`grpc-vuex <output_file_path> <proto_file_paths ...>`
 
 ## Command Options
 `grpc-vuex -h`
 
 ## Example
-`grpc-vuex helloworld.proto output.js --endpoint https://yourdomain.com`
+`grpc-vuex output.js helloworld.proto --endpoint https://yourdomain.com`
 
 ### helloworld.proto
 
