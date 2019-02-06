@@ -191,7 +191,7 @@ describe('generateActionsCode', ()=>{
     }
     const code = generateActionsCode([param, param])
     expect(code).toBe(
-`export function sayHello (params, config, options) {
+`export function sayHello (context, params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
@@ -205,7 +205,7 @@ describe('generateActionsCode', ()=>{
       return res
     })
 }
-export function sayHello (params, config, options) {
+export function sayHello (context, params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
@@ -257,7 +257,7 @@ export const types = {
 }
 
 export const grpc = new GRPC('http://localhost:8080/')
-export function sayHello (params, config, options) {
+export function sayHello (context, params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
@@ -271,7 +271,7 @@ export function sayHello (params, config, options) {
       return res
     })
 }
-export function sayHello (params, config, options) {
+export function sayHello (context, params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
