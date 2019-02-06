@@ -120,16 +120,17 @@ export function generateActionsCode (params) {
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
-`export function ${name} (params, options) {
+`export function ${name} (context, params, config, options) {
   ${generateRequestCode(protoName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
+      options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (options && options.hasMutation) context.commit(types.${mutationType}, res)
+      if (config && config.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
 }`
@@ -196,8 +197,18 @@ function _generateDtsCode (messages, actions) {
 }
 
 export function generateDtsCode(params) {
-  return _.chain(params)
+  const grpcClass = `class GRPC {
+  endpoint:string;
+  defaultOptions:object;
+  constructor(endpoint:string);
+  getDeadline(sec:number);
+  call(arr:{ client:string, method:string, req:object, options:object });
+  error (err:Error);
+}
+export var grpc:GRPC;`
+  const dts = _.chain(params)
     .map(({ messages, actions })=>_generateDtsCode(messages, actions))
     .join('\n\n')
     .value()
+  return `${grpcClass}\n\n${dts}`
 }

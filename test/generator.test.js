@@ -191,29 +191,31 @@ describe('generateActionsCode', ()=>{
     }
     const code = generateActionsCode([param, param])
     expect(code).toBe(
-`export function sayHello (params, options) {
+`export function sayHello (params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
+      options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (options && options.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }
-export function sayHello (params, options) {
+export function sayHello (params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
+      options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (options && options.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }`
@@ -255,29 +257,31 @@ export const types = {
 }
 
 export const grpc = new GRPC('http://localhost:8080/')
-export function sayHello (params, options) {
+export function sayHello (params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
+      options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (options && options.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }
-export function sayHello (params, options) {
+export function sayHello (params, config, options) {
   const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
+      options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (options && options.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }
@@ -293,7 +297,17 @@ describe('generateDtsCode', ()=>{
     const messages = getMessages(json)
     const actions = getActions(services)
     expect(generateDtsCode([{ messages, actions }])).toBe(
-`interface User {
+`class GRPC {
+  endpoint:string;
+  defaultOptions:object;
+  constructor(endpoint:string);
+  getDeadline(sec:number);
+  call(arr:{ client:string, method:string, req:object, options:object });
+  error (err:Error);
+}
+export var grpc:GRPC;
+
+interface User {
   name?:string;
   age?:number;
   children?:string[];
@@ -312,7 +326,17 @@ export function sayHello(param:HelloRequest):Promise<HelloReply>;`)
     const messages = getMessages(json)
     const actions = getActions(services)
     expect(generateDtsCode([{ messages, actions }, { messages, actions }])).toBe(
-`interface User {
+`class GRPC {
+  endpoint:string;
+  defaultOptions:object;
+  constructor(endpoint:string);
+  getDeadline(sec:number);
+  call(arr:{ client:string, method:string, req:object, options:object });
+  error (err:Error);
+}
+export var grpc:GRPC;
+
+interface User {
   name?:string;
   age?:number;
   children?:string[];
@@ -363,7 +387,17 @@ export function sayHello(param:HelloRequest):Promise<HelloReply>;`
     const messages = getMessages(json)
     const actions = getActions(services)
     expect(generateDtsCode([{ messages, actions }, { messages, actions }])).toBe(
-`interface HelloRequest {
+`class GRPC {
+  endpoint:string;
+  defaultOptions:object;
+  constructor(endpoint:string);
+  getDeadline(sec:number);
+  call(arr:{ client:string, method:string, req:object, options:object });
+  error (err:Error);
+}
+export var grpc:GRPC;
+
+interface HelloRequest {
 
 }
 interface HelloReply {

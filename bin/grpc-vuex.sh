@@ -183,7 +183,7 @@ module.exports = "const Case = {\n  camel: (str)=>{\n    str = str.charAt(0).toL
 /* 12 */
 /***/ (function(module, exports) {
 
-module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    this.defaultOptions = {\n      deadline: (new Date()).setSeconds((new Date()).getSeconds() + 5)\n    }\n    if (endpoint) {\n      this.endpoint = endpoint\n    } else {\n      throw new Error('Invalid endpoint')\n    }\n  }\n  call({ client, method, req }) {\n    const cl = new client(this.endpoint)\n    return cl[method](req, this.defaultOptions)\n      .catch(this.error)\n  }\n  error (err) {\n    console.error(err)\n  }\n}\n"
+module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    this.defaultOptions = {}\n    if (endpoint) {\n      this.endpoint = endpoint\n    } else {\n      throw new Error('Invalid endpoint')\n    }\n  }\n  getDeadline(sec = 5) {\n    return (new Date()).setSeconds((new Date()).getSeconds() + sec)\n  }\n  call({ client, method, req, options }) {\n    const cl = new client(this.endpoint)\n    const opts = Object.assign({}, this.defaultOptions, options)\n    if (!this.defaultOptions.deadline) {\n      opts.deadline = this.getDeadline()\n    }\n    return cl[method](req, opts)\n      .catch(this.error)\n  }\n  error (err) {\n    console.error(err)\n  }\n}\n"
 
 /***/ }),
 /* 13 */
@@ -560,16 +560,17 @@ function generateActionsCode (params) {
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
-`export function ${name} (params, options) {
+`export function ${name} (context, params, config, options) {
   ${generateRequestCode(protoName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
+      options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (options && options.hasMutation) context.commit(types.${mutationType}, res)
+      if (config && config.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
 }`
@@ -636,10 +637,20 @@ function _generateDtsCode (messages, actions) {
 }
 
 function generateDtsCode(params) {
-  return external_lodash_default.a.chain(params)
+  const grpcClass = `class GRPC {
+  endpoint:string;
+  defaultOptions:object;
+  constructor(endpoint:string);
+  getDeadline(sec:number);
+  call(arr:{ client:string, method:string, req:object, options:object });
+  error (err:Error);
+}
+export var grpc:GRPC;`
+  const dts = external_lodash_default.a.chain(params)
     .map(({ messages, actions })=>_generateDtsCode(messages, actions))
     .join('\n\n')
     .value()
+  return `${grpcClass}\n\n${dts}`
 }
 
 // EXTERNAL MODULE: ./node_modules/raw-loader!./src/case.js
