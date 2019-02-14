@@ -121,6 +121,7 @@ export function generateActionsCode (params) {
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
+  if (!arg) arg = {}
   ${generateRequestCode(protoName, message, models[message])}
   return grpc.call({
       client: ${client},

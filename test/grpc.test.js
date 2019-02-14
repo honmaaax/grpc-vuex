@@ -1,4 +1,5 @@
 import _ from 'lodash'
+import Promise from 'bluebird'
 
 import GRPC from '../src/grpc'
 import { GreeterPromiseClient } from './grpc/helloworld_grpc_web_pb'
@@ -64,5 +65,23 @@ describe('call()', ()=>{
     })
     expect(_.get(result, 'then')).toBeTruthy()
     expect(_.isFunction(result.then)).toBeTruthy()
+  })
+})
+
+describe('error()', ()=>{
+  let grpc;
+  beforeAll(()=>{
+    grpc = new GRPC(endpoint)
+  })
+  it('returns an instance', () => {
+    return Promise.resolve()
+      .then(()=>grpc.error({code: 123, message: 'hoge'}))
+      .then(()=>{
+        expect(true).toBe(false)
+      })
+      .catch((err)=>{
+        expect(err.code).toBe(123)
+        expect(err.message).toBe('hoge')
+      })
   })
 })
