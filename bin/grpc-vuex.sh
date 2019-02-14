@@ -552,7 +552,7 @@ function generateRequestCode (protoName, message, model) {
     .map((value, key)=>(`${key}:${protoName}.${value}`))
     .join(',')
     .value()
-  return `const req = createRequest(params, ${protoName}.${message}, {${model}})`
+  return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${model}})`
 }
 
 function generateActionsCode (params) {
@@ -560,17 +560,17 @@ function generateActionsCode (params) {
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
-`export function ${name} (context, params, config, options) {
+`export function ${name} (context, arg) {
   ${generateRequestCode(protoName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
-      options,
+      options: arg.options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (config && config.hasMutation) context.commit(types.${mutationType}, res)
+      if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
 }`
@@ -605,6 +605,7 @@ ${generateActionsCode(params)}
 }
 
 function _generateDtsCode (messages, actions) {
+  const ignoreMessages = []
   const interfaces = external_lodash_default.a.chain(messages)
     .map(({ fields }, name)=>{
       fields = external_lodash_default.a.chain(fields)
@@ -623,13 +624,18 @@ function _generateDtsCode (messages, actions) {
         .map(({ type, name })=>`  ${name}?:${type};`)
         .join('\n')
         .value()
-      return `interface ${name} {\n${fields}\n}`
+      if (external_lodash_default.a.size(fields)) {
+        return `interface ${name} {\n${fields}\n}`
+      } else {
+        ignoreMessages.push(name)
+      }
     })
+    .compact()
     .join('\n')
     .value()
   const functions = external_lodash_default.a.chain(actions)
     .map(({ name, message, response })=>
-      `export function ${name}(param:${message}):Promise<${response}>;`
+      `export function ${name}(${external_lodash_default.a.includes(ignoreMessages, message) ? '' : `arg:ActionArgument<${message}>`}):Promise<${response}>;`
     )
     .join('\n')
     .value()
@@ -645,12 +651,27 @@ function generateDtsCode(params) {
   call(arr:{ client:string, method:string, req:object, options:object });
   error (err:Error);
 }
-export var grpc:GRPC;`
+export var grpc:GRPC;
+
+interface ActionArgument<T> {
+  params:T;
+  hasMutation:boolean;
+  options:object;
+}`
+  const types = `export interface types {
+  ${external_lodash_default.a.chain(params)
+    .map(({ actions })=>external_lodash_default.a.map(actions, 'mutationType'))
+    .flatten()
+    .uniq()
+    .map((mutationType)=>`${mutationType}: '${mutationType}';`)
+    .join('\n')
+    .value()}
+}`
   const dts = external_lodash_default.a.chain(params)
     .map(({ messages, actions })=>_generateDtsCode(messages, actions))
     .join('\n\n')
     .value()
-  return `${grpcClass}\n\n${dts}`
+  return `${grpcClass}\n\n${types}\n\n${dts}`
 }
 
 // EXTERNAL MODULE: ./node_modules/raw-loader!./src/case.js

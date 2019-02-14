@@ -112,7 +112,7 @@ export function generateRequestCode (protoName, message, model) {
     .map((value, key)=>(`${key}:${protoName}.${value}`))
     .join(',')
     .value()
-  return `const req = createRequest(params, ${protoName}.${message}, {${model}})`
+  return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${model}})`
 }
 
 export function generateActionsCode (params) {
@@ -120,17 +120,17 @@ export function generateActionsCode (params) {
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
-`export function ${name} (context, params, config, options) {
+`export function ${name} (context, arg) {
   ${generateRequestCode(protoName, message, models[message])}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
-      options,
+      options: arg.options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (config && config.hasMutation) context.commit(types.${mutationType}, res)
+      if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
     })
 }`
@@ -165,6 +165,7 @@ ${generateActionsCode(params)}
 }
 
 function _generateDtsCode (messages, actions) {
+  const ignoreMessages = []
   const interfaces = _.chain(messages)
     .map(({ fields }, name)=>{
       fields = _.chain(fields)
@@ -183,13 +184,18 @@ function _generateDtsCode (messages, actions) {
         .map(({ type, name })=>`  ${name}?:${type};`)
         .join('\n')
         .value()
-      return `interface ${name} {\n${fields}\n}`
+      if (_.size(fields)) {
+        return `interface ${name} {\n${fields}\n}`
+      } else {
+        ignoreMessages.push(name)
+      }
     })
+    .compact()
     .join('\n')
     .value()
   const functions = _.chain(actions)
     .map(({ name, message, response })=>
-      `export function ${name}(param:${message}):Promise<${response}>;`
+      `export function ${name}(${_.includes(ignoreMessages, message) ? '' : `arg:ActionArgument<${message}>`}):Promise<${response}>;`
     )
     .join('\n')
     .value()
@@ -205,10 +211,25 @@ export function generateDtsCode(params) {
   call(arr:{ client:string, method:string, req:object, options:object });
   error (err:Error);
 }
-export var grpc:GRPC;`
+export var grpc:GRPC;
+
+interface ActionArgument<T> {
+  params:T;
+  hasMutation:boolean;
+  options:object;
+}`
+  const types = `export interface types {
+  ${_.chain(params)
+    .map(({ actions })=>_.map(actions, 'mutationType'))
+    .flatten()
+    .uniq()
+    .map((mutationType)=>`${mutationType}: '${mutationType}';`)
+    .join('\n')
+    .value()}
+}`
   const dts = _.chain(params)
     .map(({ messages, actions })=>_generateDtsCode(messages, actions))
     .join('\n\n')
     .value()
-  return `${grpcClass}\n\n${dts}`
+  return `${grpcClass}\n\n${types}\n\n${dts}`
 }

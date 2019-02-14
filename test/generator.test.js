@@ -174,7 +174,7 @@ describe('generateInitGrpcCode', ()=>{
 describe('generateRequestCode', ()=>{
   it('returns js code', () => {
     const code = generateRequestCode('helloworld', 'HelloRequest', {users: 'User'})
-    expect(code).toBe(`const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})`)
+    expect(code).toBe(`const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})`)
   })
 })
 
@@ -191,31 +191,31 @@ describe('generateActionsCode', ()=>{
     }
     const code = generateActionsCode([param, param])
     expect(code).toBe(
-`export function sayHello (context, params, config, options) {
-  const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
+`export function sayHello (context, arg) {
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
-      options,
+      options: arg.options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }
-export function sayHello (context, params, config, options) {
-  const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
+export function sayHello (context, arg) {
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
-      options,
+      options: arg.options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }`
@@ -257,31 +257,31 @@ export const types = {
 }
 
 export const grpc = new GRPC('http://localhost:8080/')
-export function sayHello (context, params, config, options) {
-  const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
+export function sayHello (context, arg) {
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
-      options,
+      options: arg.options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }
-export function sayHello (context, params, config, options) {
-  const req = createRequest(params, helloworld.HelloRequest, {users:helloworld.User})
+export function sayHello (context, arg) {
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
       req,
-      options,
+      options: arg.options,
     })
     .then((res)=>{
       res = res.toObject()
-      if (config && config.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
 }
@@ -307,6 +307,16 @@ describe('generateDtsCode', ()=>{
 }
 export var grpc:GRPC;
 
+interface ActionArgument<T> {
+  params:T;
+  hasMutation:boolean;
+  options:object;
+}
+
+export interface types {
+  GREETER_SAYHELLO: 'GREETER_SAYHELLO';
+}
+
 interface User {
   name?:string;
   age?:number;
@@ -318,7 +328,7 @@ interface HelloRequest {
 interface HelloReply {
   users?:User[];
 }
-export function sayHello(param:HelloRequest):Promise<HelloReply>;`)
+export function sayHello(arg:ActionArgument<HelloRequest>):Promise<HelloReply>;`)
   })
   it('returns multiple js code', () => {
     const json = toJSON(proto)
@@ -336,18 +346,15 @@ export function sayHello(param:HelloRequest):Promise<HelloReply>;`)
 }
 export var grpc:GRPC;
 
-interface User {
-  name?:string;
-  age?:number;
-  children?:string[];
+interface ActionArgument<T> {
+  params:T;
+  hasMutation:boolean;
+  options:object;
 }
-interface HelloRequest {
-  users?:User[];
+
+export interface types {
+  GREETER_SAYHELLO: 'GREETER_SAYHELLO';
 }
-interface HelloReply {
-  users?:User[];
-}
-export function sayHello(param:HelloRequest):Promise<HelloReply>;
 
 interface User {
   name?:string;
@@ -360,7 +367,20 @@ interface HelloRequest {
 interface HelloReply {
   users?:User[];
 }
-export function sayHello(param:HelloRequest):Promise<HelloReply>;`
+export function sayHello(arg:ActionArgument<HelloRequest>):Promise<HelloReply>;
+
+interface User {
+  name?:string;
+  age?:number;
+  children?:string[];
+}
+interface HelloRequest {
+  users?:User[];
+}
+interface HelloReply {
+  users?:User[];
+}
+export function sayHello(arg:ActionArgument<HelloRequest>):Promise<HelloReply>;`
     )
   })
   it('returns with imported code', () => {
@@ -397,21 +417,25 @@ export function sayHello(param:HelloRequest):Promise<HelloReply>;`
 }
 export var grpc:GRPC;
 
-interface HelloRequest {
-
+interface ActionArgument<T> {
+  params:T;
+  hasMutation:boolean;
+  options:object;
 }
+
+export interface types {
+  GREETER_SAYHELLO: 'GREETER_SAYHELLO';
+}
+
 interface HelloReply {
   users?:User[];
 }
-export function sayHello(param:HelloRequest):Promise<HelloReply>;
+export function sayHello():Promise<HelloReply>;
 
-interface HelloRequest {
-
-}
 interface HelloReply {
   users?:User[];
 }
-export function sayHello(param:HelloRequest):Promise<HelloReply>;`
+export function sayHello():Promise<HelloReply>;`
     )
   })
 })
