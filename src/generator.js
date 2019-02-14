@@ -218,14 +218,14 @@ interface ActionArgument<T> {
   hasMutation:boolean;
   options:object;
 }`
-  const types = `export interface types {
-  ${_.chain(params)
-    .map(({ actions })=>_.map(actions, 'mutationType'))
-    .flatten()
-    .uniq()
-    .map((mutationType)=>`${mutationType}: '${mutationType}';`)
-    .join('\n')
-    .value()}
+  const types = `export var types:{
+${_.chain(params)
+  .map(({ actions })=>_.map(actions, 'mutationType'))
+  .flatten()
+  .uniq()
+  .map((mutationType)=>`  ${mutationType}: '${mutationType}';`)
+  .join('\n')
+  .value()}
 }`
   const dts = _.chain(params)
     .map(({ messages, actions })=>_generateDtsCode(messages, actions))

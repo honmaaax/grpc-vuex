@@ -658,14 +658,14 @@ interface ActionArgument<T> {
   hasMutation:boolean;
   options:object;
 }`
-  const types = `export interface types {
-  ${external_lodash_default.a.chain(params)
-    .map(({ actions })=>external_lodash_default.a.map(actions, 'mutationType'))
-    .flatten()
-    .uniq()
-    .map((mutationType)=>`${mutationType}: '${mutationType}';`)
-    .join('\n')
-    .value()}
+  const types = `export var types:{
+${external_lodash_default.a.chain(params)
+  .map(({ actions })=>external_lodash_default.a.map(actions, 'mutationType'))
+  .flatten()
+  .uniq()
+  .map((mutationType)=>`  ${mutationType}: '${mutationType}';`)
+  .join('\n')
+  .value()}
 }`
   const dts = external_lodash_default.a.chain(params)
     .map(({ messages, actions })=>_generateDtsCode(messages, actions))

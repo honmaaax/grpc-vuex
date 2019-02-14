@@ -313,7 +313,7 @@ interface ActionArgument<T> {
   options:object;
 }
 
-export interface types {
+export var types:{
   GREETER_SAYHELLO: 'GREETER_SAYHELLO';
 }
 
@@ -352,7 +352,7 @@ interface ActionArgument<T> {
   options:object;
 }
 
-export interface types {
+export var types:{
   GREETER_SAYHELLO: 'GREETER_SAYHELLO';
 }
 
@@ -423,7 +423,7 @@ interface ActionArgument<T> {
   options:object;
 }
 
-export interface types {
+export var types:{
   GREETER_SAYHELLO: 'GREETER_SAYHELLO';
 }
 
