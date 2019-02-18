@@ -48,11 +48,18 @@ makeDir('.grpc-vuex')
           .then((list)=>Promise.map(list, (p)=>generateFileByProtocDependencies(p))),
       ])
       .then(([ jsons ])=>{
+        const models = _.chain(jsons)
+          .map((json, i)=>{
+            const protoName = path.basename(protoFilePaths[i], '.proto')
+            const messages = getMessages(json)
+            return getModels(messages, protoName)
+          })
+          .reduce((obj, model)=>_.merge({}, obj, model), {})
+          .value()
         const params = jsons.map((json, i)=>{
           const protoName = path.basename(protoFilePaths[i], '.proto')
           const services = getServices(json)
           const messages = getMessages(json)
-          const models = getModels(messages)
           const mutationTypes = getMutationTypes(services)
           const actions = getActions(services, protoName)
           return {

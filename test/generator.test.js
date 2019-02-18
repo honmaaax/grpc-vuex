@@ -127,24 +127,17 @@ describe('generateFileByProtocDependencies', ()=>{
 
 describe('generateImportCode', ()=>{
   it('returns js code', () => {
-    const json = toJSON(proto)
-    const services = getServices(json)
-    const actions = getActions(services, 'helloworld')
-    const protos = _.chain([{ actions }, { actions }])
-      .map('actions')
-      .map((actions)=>({
-        protoName: actions[0].protoName,
-        client: actions[0].client,
-      }))
-      .value()
-    const code = generateImportCode(protos, 'http://localhost:8080')
+    const messageProtos = ['helloworld']
+    const clientProtos = [{
+      protoName: 'helloworld',
+      client: 'GreeterPromiseClient',
+    }]
+    const code = generateImportCode(messageProtos, clientProtos)
     expect(code).toBe(
 `import GRPC from './grpc'
 import { createRequest } from './request'
-import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
 import helloworld from './helloworld_pb'
-import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
-import helloworld from './helloworld_pb'`
+import { GreeterPromiseClient } from './helloworld_grpc_web_pb'`
     )
   })
 })
@@ -173,8 +166,8 @@ describe('generateInitGrpcCode', ()=>{
 
 describe('generateRequestCode', ()=>{
   it('returns js code', () => {
-    const code = generateRequestCode('helloworld', 'HelloRequest', {users: 'User'})
-    expect(code).toBe(`const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})`)
+    const code = generateRequestCode('helloworld', 'HelloRequest', {HelloRequest: {users: {type: 'User', namespace: 'helloworld'}}})
+    expect(code).toBe(`const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})`)
   })
 })
 
@@ -183,7 +176,7 @@ describe('generateActionsCode', ()=>{
     const json = toJSON(proto)
     const services = getServices(json)
     const messages = getMessages(json)
-    const models = getModels(messages)
+    const models = getModels(messages, 'helloworld')
     const actions = getActions(services, 'helloworld')
     const param = {
       actions,
@@ -193,7 +186,7 @@ describe('generateActionsCode', ()=>{
     expect(code).toBe(
 `export function sayHello (context, arg) {
   if (!arg) arg = {}
-  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
@@ -208,7 +201,7 @@ describe('generateActionsCode', ()=>{
 }
 export function sayHello (context, arg) {
   if (!arg) arg = {}
-  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
@@ -235,7 +228,7 @@ describe('generateCode', ()=>{
     const json = toJSON(proto)
     const services = getServices(json)
     const messages = getMessages(json)
-    const models = getModels(messages)
+    const models = getModels(messages, protoName)
     const mutationTypes = getMutationTypes(services)
     const actions = getActions(services, protoName)
     const param = {
@@ -248,10 +241,8 @@ describe('generateCode', ()=>{
     expect(code).toBe(
 `import GRPC from './grpc'
 import { createRequest } from './request'
-import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
 import helloworld from './helloworld_pb'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
-import helloworld from './helloworld_pb'
 
 export const types = {
   GREETER_SAYHELLO: 'GREETER_SAYHELLO',
@@ -261,7 +252,7 @@ export const types = {
 export const grpc = new GRPC('http://localhost:8080/')
 export function sayHello (context, arg) {
   if (!arg) arg = {}
-  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',
@@ -276,7 +267,7 @@ export function sayHello (context, arg) {
 }
 export function sayHello (context, arg) {
   if (!arg) arg = {}
-  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users:helloworld.User})
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})
   return grpc.call({
       client: GreeterPromiseClient,
       method: 'sayHello',

@@ -47,13 +47,13 @@ export function getMessages(json) {
     .value()
 }
 
-export function getModels(messages) {
+export function getModels(messages, namespace) {
   return _.mapValues(messages, (message)=>{
     return _.chain(message.fields)
       .toPairs()
-      .filter(([ name, { rule } ])=>(rule === 'repeated'))
+      .filter(([ name, { type } ])=>/^[A-Z]/.test(type))
       .fromPairs()
-      .mapValues(({ type })=>type)
+      .mapValues(({ type })=>({ type, namespace }))
       .value()
   })
 }

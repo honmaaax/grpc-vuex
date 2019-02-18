@@ -167,7 +167,7 @@ describe('getModels', ()=>{
   let models = []
   beforeAll(()=>{
     const messages = getMessages(toJSON(proto))
-    models = getModels(messages)
+    models = getModels(messages, 'helloworld')
   })
   it('returns object', () => {
     expect(_.isPlainObject(models)).toBeTruthy()

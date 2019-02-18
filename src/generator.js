@@ -84,13 +84,11 @@ export function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
   })
 }
 
-export function generateImportCode (protos) {
+export function generateImportCode (messageProtos, clientProtos) {
   return `import GRPC from './grpc'
 import { createRequest } from './request'
-${protos.map(({ protoName, client })=>
-`import { ${client} } from './${protoName}_grpc_web_pb'
-import ${protoName} from './${protoName}_pb'`
-).join('\n')}`
+${messageProtos.map((protoName)=>`import ${protoName} from './${protoName}_pb'`).join('\n')}
+${clientProtos.map(({ protoName, client })=>`import { ${client} } from './${protoName}_grpc_web_pb'`).join('\n')}`
 }
 
 export function generateMutationTypesCode (mutationTypes) {
@@ -107,12 +105,18 @@ export function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-export function generateRequestCode (protoName, message, model) {
-  model = _.chain(model)
-    .map((value, key)=>(`${key}:${protoName}.${value}`))
-    .join(',')
+export function generateRequestCode (protoName, message, models) {
+  function getNestedModels (models, key) {
+    return _.reduce(models[key], (obj, value, key)=>{
+      return _.merge({[key]: value}, obj, getNestedModels(models, value.type))
+    }, {})
+  }
+  const nestedModels = getNestedModels(models, message)
+  const stringifiedModels = _.chain(nestedModels)
+    .map(({ type, namespace }, key)=>(`${key}: ${namespace}.${type}`))
+    .join(', ')
     .value()
-  return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${model}})`
+  return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${stringifiedModels}})`
 }
 
 export function generateActionsCode (params) {
@@ -122,7 +126,7 @@ export function generateActionsCode (params) {
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
   if (!arg) arg = {}
-  ${generateRequestCode(protoName, message, models[message])}
+  ${generateRequestCode(protoName, message, models)}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -148,15 +152,25 @@ export function generateCode (params, endpoint) {
     .compact()
     .flatten()
     .value()
-  const protos = _.chain(params)
+  const messageProtos = _.chain(params[0].models)
+    .map((values)=>_.chain(values)
+      .values()
+      .map('namespace')
+      .value()
+    )
+    .flattenDeep()
+    .uniq()
+    .value()
+  const clientProtos = _.chain(params)
     .map('actions')
     .compact()
     .map((actions)=>({
       protoName: actions[0].protoName,
       client: actions[0].client,
     }))
+    .uniqBy(({ protoName, client })=>`${protoName}.${client}`)
     .value()
-  return `${generateImportCode(protos)}
+  return `${generateImportCode(messageProtos, clientProtos)}
 
 ${generateMutationTypesCode(mutationTypes)}
 

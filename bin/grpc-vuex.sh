@@ -367,13 +367,13 @@ function getMessages(json) {
     .value()
 }
 
-function getModels(messages) {
+function getModels(messages, namespace) {
   return external_lodash_default.a.mapValues(messages, (message)=>{
     return external_lodash_default.a.chain(message.fields)
       .toPairs()
-      .filter(([ name, { rule } ])=>(rule === 'repeated'))
+      .filter(([ name, { type } ])=>/^[A-Z]/.test(type))
       .fromPairs()
-      .mapValues(({ type })=>type)
+      .mapValues(({ type })=>({ type, namespace }))
       .value()
   })
 }
@@ -524,13 +524,11 @@ function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
   })
 }
 
-function generateImportCode (protos) {
+function generateImportCode (messageProtos, clientProtos) {
   return `import GRPC from './grpc'
 import { createRequest } from './request'
-${protos.map(({ protoName, client })=>
-`import { ${client} } from './${protoName}_grpc_web_pb'
-import ${protoName} from './${protoName}_pb'`
-).join('\n')}`
+${messageProtos.map((protoName)=>`import ${protoName} from './${protoName}_pb'`).join('\n')}
+${clientProtos.map(({ protoName, client })=>`import { ${client} } from './${protoName}_grpc_web_pb'`).join('\n')}`
 }
 
 function generateMutationTypesCode (mutationTypes) {
@@ -547,12 +545,18 @@ function generateInitGrpcCode (endpoint) {
   return `export const grpc = new GRPC('${endpoint}')`
 }
 
-function generateRequestCode (protoName, message, model) {
-  model = external_lodash_default.a.chain(model)
-    .map((value, key)=>(`${key}:${protoName}.${value}`))
-    .join(',')
+function generateRequestCode (protoName, message, models) {
+  function getNestedModels (models, key) {
+    return external_lodash_default.a.reduce(models[key], (obj, value, key)=>{
+      return external_lodash_default.a.merge({[key]: value}, obj, getNestedModels(models, value.type))
+    }, {})
+  }
+  const nestedModels = getNestedModels(models, message)
+  const stringifiedModels = external_lodash_default.a.chain(nestedModels)
+    .map(({ type, namespace }, key)=>(`${key}: ${namespace}.${type}`))
+    .join(', ')
     .value()
-  return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${model}})`
+  return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${stringifiedModels}})`
 }
 
 function generateActionsCode (params) {
@@ -562,7 +566,7 @@ function generateActionsCode (params) {
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
   if (!arg) arg = {}
-  ${generateRequestCode(protoName, message, models[message])}
+  ${generateRequestCode(protoName, message, models)}
   return grpc.call({
       client: ${client},
       method: '${method}',
@@ -588,15 +592,25 @@ function generateCode (params, endpoint) {
     .compact()
     .flatten()
     .value()
-  const protos = external_lodash_default.a.chain(params)
+  const messageProtos = external_lodash_default.a.chain(params[0].models)
+    .map((values)=>external_lodash_default.a.chain(values)
+      .values()
+      .map('namespace')
+      .value()
+    )
+    .flattenDeep()
+    .uniq()
+    .value()
+  const clientProtos = external_lodash_default.a.chain(params)
     .map('actions')
     .compact()
     .map((actions)=>({
       protoName: actions[0].protoName,
       client: actions[0].client,
     }))
+    .uniqBy(({ protoName, client })=>`${protoName}.${client}`)
     .value()
-  return `${generateImportCode(protos)}
+  return `${generateImportCode(messageProtos, clientProtos)}
 
 ${generateMutationTypesCode(mutationTypes)}
 
@@ -720,11 +734,18 @@ makeDir('.grpc-vuex')
           .then((list)=>external_bluebird_default.a.map(list, (p)=>generateFileByProtocDependencies(p))),
       ])
       .then(([ jsons ])=>{
+        const models = external_lodash_default.a.chain(jsons)
+          .map((json, i)=>{
+            const protoName = external_path_default.a.basename(src_command["protoFilePaths"][i], '.proto')
+            const messages = getMessages(json)
+            return getModels(messages, protoName)
+          })
+          .reduce((obj, model)=>external_lodash_default.a.merge({}, obj, model), {})
+          .value()
         const params = jsons.map((json, i)=>{
           const protoName = external_path_default.a.basename(src_command["protoFilePaths"][i], '.proto')
           const services = getServices(json)
           const messages = getMessages(json)
-          const models = getModels(messages)
           const mutationTypes = getMutationTypes(services)
           const actions = getActions(services, protoName)
           return {
