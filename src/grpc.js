@@ -21,6 +21,6 @@ export default class GRPC {
   }
   error (err) {
     console.error(err)
-    return Promise.reject(err)
+    throw err
   }
 }

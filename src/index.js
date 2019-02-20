@@ -7,6 +7,7 @@ import {
   outputFilePath,
   protoFilePaths,
   endpoint,
+  isDebugMode,
 } from './command'
 import {
   readFile,
@@ -31,6 +32,7 @@ import {
 } from './generator'
 
 import caseJsCode from 'raw-loader!./case'
+import debugJsCode from 'raw-loader!./debug'
 import grpcJsCode from 'raw-loader!./grpc'
 import requestJsCode from 'raw-loader!./request'
 import typeJsCode from 'raw-loader!./type'
@@ -69,7 +71,7 @@ makeDir('.grpc-vuex')
             messages,
           }
         })
-        const code = generateCode(params, endpoint)
+        const code = generateCode(params, endpoint, isDebugMode)
         const dtsCode = generateDtsCode(params)
         return Promise.all([
           writeFile(tempFilePath, code),
@@ -84,6 +86,7 @@ makeDir('.grpc-vuex')
       }),
     Promise.map([
       ['case.js', caseJsCode],
+      ['debug.js', debugJsCode],
       ['grpc.js', grpcJsCode],
       ['request.js', requestJsCode],
       ['type.js', typeJsCode],

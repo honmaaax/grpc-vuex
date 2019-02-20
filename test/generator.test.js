@@ -135,6 +135,7 @@ describe('generateImportCode', ()=>{
     const code = generateImportCode(messageProtos, clientProtos)
     expect(code).toBe(
 `import GRPC from './grpc'
+import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
 import helloworld from './helloworld_pb'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'`
@@ -193,8 +194,8 @@ describe('generateActionsCode', ()=>{
       req,
       options: arg.options,
     })
-    .then((res)=>{
-      res = res.toObject()
+    .then((raw)=>{
+      const res = raw.toObject()
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -208,8 +209,8 @@ export function sayHello (context, arg) {
       req,
       options: arg.options,
     })
-    .then((res)=>{
-      res = res.toObject()
+    .then((raw)=>{
+      const res = raw.toObject()
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -240,6 +241,7 @@ describe('generateCode', ()=>{
     expect(_.isString(code)).toBeTruthy()
     expect(code).toBe(
 `import GRPC from './grpc'
+import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
 import helloworld from './helloworld_pb'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
@@ -259,8 +261,8 @@ export function sayHello (context, arg) {
       req,
       options: arg.options,
     })
-    .then((res)=>{
-      res = res.toObject()
+    .then((raw)=>{
+      const res = raw.toObject()
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -274,10 +276,82 @@ export function sayHello (context, arg) {
       req,
       options: arg.options,
     })
-    .then((res)=>{
-      res = res.toObject()
+    .then((raw)=>{
+      const res = raw.toObject()
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
+    })
+}
+`
+    )
+  })
+  it('returns debug mode js code', () => {
+    const json = toJSON(proto)
+    const services = getServices(json)
+    const messages = getMessages(json)
+    const models = getModels(messages, protoName)
+    const mutationTypes = getMutationTypes(services)
+    const actions = getActions(services, protoName)
+    const param = {
+      mutationTypes,
+      actions,
+      models,
+    }
+    const code = generateCode([param, param], 'http://localhost:8080/', true)
+    expect(_.isString(code)).toBeTruthy()
+    expect(code).toBe(
+`import GRPC from './grpc'
+import { logRequest, logResponse, logError } from './debug'
+import { createRequest } from './request'
+import helloworld from './helloworld_pb'
+import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
+
+export const types = {
+  GREETER_SAYHELLO: 'GREETER_SAYHELLO',
+  GREETER_SAYHELLO: 'GREETER_SAYHELLO',
+}
+
+export const grpc = new GRPC('http://localhost:8080/')
+export function sayHello (context, arg) {
+  if (!arg) arg = {}
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})
+  logRequest('sayHello', arg.params)
+  return grpc.call({
+      client: GreeterPromiseClient,
+      method: 'sayHello',
+      req,
+      options: arg.options,
+    })
+    .then((raw)=>{
+      const res = raw.toObject()
+      logResponse('sayHello', JSON.parse(JSON.stringify(res)))
+      if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      return res
+    })
+    .catch((err)=>{
+      logError('sayHello', err)
+      throw err
+    })
+}
+export function sayHello (context, arg) {
+  if (!arg) arg = {}
+  const req = createRequest(arg.params || {}, helloworld.HelloRequest, {users: helloworld.User})
+  logRequest('sayHello', arg.params)
+  return grpc.call({
+      client: GreeterPromiseClient,
+      method: 'sayHello',
+      req,
+      options: arg.options,
+    })
+    .then((raw)=>{
+      const res = raw.toObject()
+      logResponse('sayHello', JSON.parse(JSON.stringify(res)))
+      if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
+      return res
+    })
+    .catch((err)=>{
+      logError('sayHello', err)
+      throw err
     })
 }
 `

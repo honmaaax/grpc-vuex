@@ -86,6 +86,7 @@ export function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
 
 export function generateImportCode (messageProtos, clientProtos) {
   return `import GRPC from './grpc'
+import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
 ${messageProtos.map((protoName)=>`import ${protoName} from './${protoName}_pb'`).join('\n')}
 ${clientProtos.map(({ protoName, client })=>`import { ${client} } from './${protoName}_grpc_web_pb'`).join('\n')}`
@@ -119,25 +120,31 @@ export function generateRequestCode (protoName, message, models) {
   return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${stringifiedModels}})`
 }
 
-export function generateActionsCode (params) {
+export function generateActionsCode (params, isDebugMode) {
   return _.chain(params)
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
   if (!arg) arg = {}
-  ${generateRequestCode(protoName, message, models)}
+  ${generateRequestCode(protoName, message, models)}${isDebugMode ? `
+  logRequest('${method}', arg.params)` : ''}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
       options: arg.options,
     })
-    .then((res)=>{
-      res = res.toObject()
+    .then((raw)=>{
+      const res = raw.toObject()${isDebugMode ? `
+      logResponse('${method}', JSON.parse(JSON.stringify(res)))` : ''}
       if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
-    })
+    })${isDebugMode ? `
+    .catch((err)=>{
+      logError('${method}', err)
+      throw err
+    })` : ''}
 }`
       )
     })
@@ -146,7 +153,7 @@ export function generateActionsCode (params) {
     .value()
 }
 
-export function generateCode (params, endpoint) {
+export function generateCode (params, endpoint, isDebugMode) {
   const mutationTypes = _.chain(params)
     .map('mutationTypes')
     .compact()
@@ -175,7 +182,7 @@ export function generateCode (params, endpoint) {
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(params)}
+${generateActionsCode(params, isDebugMode)}
 `
 }
 

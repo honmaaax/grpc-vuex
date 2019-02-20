@@ -82,7 +82,7 @@
 /******/
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 16);
+/******/ 	return __webpack_require__(__webpack_require__.s = 17);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -113,7 +113,7 @@ module.exports = require("fs");
 /* 4 */
 /***/ (function(module, exports, __webpack_require__) {
 
-const program = __webpack_require__(15)
+const program = __webpack_require__(16)
 
 program
   .usage('<output_file_path> <proto_file_paths ...>')
@@ -132,6 +132,7 @@ const results = {
   outputFilePath,
   protoFilePaths,
   endpoint: program.endpoint || 'http://localhost:8080',
+  isDebugMode: program.debug,
 }
 if (program.debug) console.log(results)
 module.exports = results
@@ -183,28 +184,34 @@ module.exports = "const Case = {\n  camel: (str)=>{\n    str = str.charAt(0).toL
 /* 12 */
 /***/ (function(module, exports) {
 
-module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    this.defaultOptions = {}\n    if (endpoint) {\n      this.endpoint = endpoint\n    } else {\n      throw new Error('Invalid endpoint')\n    }\n  }\n  getDeadline(sec = 5) {\n    return (new Date()).setSeconds((new Date()).getSeconds() + sec)\n  }\n  call({ client, method, req, options }) {\n    const cl = new client(this.endpoint)\n    const opts = Object.assign({}, this.defaultOptions, options)\n    if (!this.defaultOptions.deadline) {\n      opts.deadline = this.getDeadline()\n    }\n    return cl[method](req, opts)\n      .catch(this.error)\n  }\n  error (err) {\n    console.error(err)\n    return Promise.reject(err)\n  }\n}\n"
+module.exports = "export function logRequest(method, params) {\n  return console.log(`%c[DEBUG] req: ${method}`, \"color:#66f\", params)\n}\nexport function logResponse(method, fields) {\n  return console.log(`%c[DEBUG] res: ${method}`, \"color:#66f\", fields)\n}\nexport function logError(method, err) {\n  return console.log(`%c[DEBUG] err: ${method}`, \"color:#f66\", err)\n}\n"
 
 /***/ }),
 /* 13 */
 /***/ (function(module, exports) {
 
-module.exports = "import Case from './case'\nimport Type from './type'\n\nexport function _createObjectRequest (key, value, messages) {\n  const req = new messages[key]()\n  Object.keys(value)\n    .map((key)=>[key, value[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, req, messages)\n    })\n  return req\n}\nexport function _createRequest (key, value, request, messages) {\n  if ( Type.isObject(value) ) {\n    value = _createObjectRequest(key, value, messages)\n  } else if ( Type.isArray(value) ) {\n    value = value.map((value)=>{\n      if ( Type.isObject(value) ) {\n        return _createObjectRequest(key, value, messages)\n      }\n      return value\n    })\n  }\n  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`\n  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)\n  request[setter](value)\n  return request\n}\n\nexport function createRequest (params, Message, messages) {\n  const request = new Message()\n  if ( !params ) return;\n  Object.keys(params)\n    .map((key)=>[key, params[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, request, messages)\n    })\n  return request\n}\n"
+module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    this.defaultOptions = {}\n    if (endpoint) {\n      this.endpoint = endpoint\n    } else {\n      throw new Error('Invalid endpoint')\n    }\n  }\n  getDeadline(sec = 5) {\n    return (new Date()).setSeconds((new Date()).getSeconds() + sec)\n  }\n  call({ client, method, req, options }) {\n    const cl = new client(this.endpoint)\n    const opts = Object.assign({}, this.defaultOptions, options)\n    if (!this.defaultOptions.deadline) {\n      opts.deadline = this.getDeadline()\n    }\n    return cl[method](req, opts)\n      .catch(this.error)\n  }\n  error (err) {\n    console.error(err)\n    throw err\n  }\n}\n"
 
 /***/ }),
 /* 14 */
 /***/ (function(module, exports) {
 
-module.exports = "const Type = {\n  isArray (item) {\n    return Object.prototype.toString.call(item) === '[object Array]'\n  },\n  isObject (item) {\n    return typeof item === 'object' && item !== null && !Type.isArray(item)\n  },\n}\nexport default Type\n"
+module.exports = "import Case from './case'\nimport Type from './type'\n\nexport function _createObjectRequest (key, value, messages) {\n  const req = new messages[key]()\n  Object.keys(value)\n    .map((key)=>[key, value[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, req, messages)\n    })\n  return req\n}\nexport function _createRequest (key, value, request, messages) {\n  if ( Type.isObject(value) ) {\n    value = _createObjectRequest(key, value, messages)\n  } else if ( Type.isArray(value) ) {\n    value = value.map((value)=>{\n      if ( Type.isObject(value) ) {\n        return _createObjectRequest(key, value, messages)\n      }\n      return value\n    })\n  }\n  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`\n  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)\n  request[setter](value)\n  return request\n}\n\nexport function createRequest (params, Message, messages) {\n  const request = new Message()\n  if ( !params ) return;\n  Object.keys(params)\n    .map((key)=>[key, params[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, request, messages)\n    })\n  return request\n}\n"
 
 /***/ }),
 /* 15 */
 /***/ (function(module, exports) {
 
-module.exports = require("commander");
+module.exports = "const Type = {\n  isArray (item) {\n    return Object.prototype.toString.call(item) === '[object Array]'\n  },\n  isObject (item) {\n    return typeof item === 'object' && item !== null && !Type.isArray(item)\n  },\n}\nexport default Type\n"
 
 /***/ }),
 /* 16 */
+/***/ (function(module, exports) {
+
+module.exports = require("commander");
+
+/***/ }),
+/* 17 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -526,6 +533,7 @@ function generateFileByProtocDependencies (protoFiles, parentDir = '.') {
 
 function generateImportCode (messageProtos, clientProtos) {
   return `import GRPC from './grpc'
+import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
 ${messageProtos.map((protoName)=>`import ${protoName} from './${protoName}_pb'`).join('\n')}
 ${clientProtos.map(({ protoName, client })=>`import { ${client} } from './${protoName}_grpc_web_pb'`).join('\n')}`
@@ -559,25 +567,31 @@ function generateRequestCode (protoName, message, models) {
   return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${stringifiedModels}})`
 }
 
-function generateActionsCode (params) {
+function generateActionsCode (params, isDebugMode) {
   return external_lodash_default.a.chain(params)
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
   if (!arg) arg = {}
-  ${generateRequestCode(protoName, message, models)}
+  ${generateRequestCode(protoName, message, models)}${isDebugMode ? `
+  logRequest('${method}', arg.params)` : ''}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
       options: arg.options,
     })
-    .then((res)=>{
-      res = res.toObject()
+    .then((raw)=>{
+      const res = raw.toObject()${isDebugMode ? `
+      logResponse('${method}', JSON.parse(JSON.stringify(res)))` : ''}
       if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
-    })
+    })${isDebugMode ? `
+    .catch((err)=>{
+      logError('${method}', err)
+      throw err
+    })` : ''}
 }`
       )
     })
@@ -586,7 +600,7 @@ function generateActionsCode (params) {
     .value()
 }
 
-function generateCode (params, endpoint) {
+function generateCode (params, endpoint, isDebugMode) {
   const mutationTypes = external_lodash_default.a.chain(params)
     .map('mutationTypes')
     .compact()
@@ -615,7 +629,7 @@ function generateCode (params, endpoint) {
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(params)}
+${generateActionsCode(params, isDebugMode)}
 `
 }
 
@@ -693,19 +707,24 @@ ${external_lodash_default.a.chain(params)
 var raw_loader_src_case = __webpack_require__(11);
 var case_default = /*#__PURE__*/__webpack_require__.n(raw_loader_src_case);
 
+// EXTERNAL MODULE: ./node_modules/raw-loader!./src/debug.js
+var debug = __webpack_require__(12);
+var debug_default = /*#__PURE__*/__webpack_require__.n(debug);
+
 // EXTERNAL MODULE: ./node_modules/raw-loader!./src/grpc.js
-var grpc = __webpack_require__(12);
+var grpc = __webpack_require__(13);
 var grpc_default = /*#__PURE__*/__webpack_require__.n(grpc);
 
 // EXTERNAL MODULE: ./node_modules/raw-loader!./src/request.js
-var request = __webpack_require__(13);
+var request = __webpack_require__(14);
 var request_default = /*#__PURE__*/__webpack_require__.n(request);
 
 // EXTERNAL MODULE: ./node_modules/raw-loader!./src/type.js
-var type = __webpack_require__(14);
+var type = __webpack_require__(15);
 var type_default = /*#__PURE__*/__webpack_require__.n(type);
 
 // CONCATENATED MODULE: ./src/index.js
+
 
 
 
@@ -755,7 +774,7 @@ makeDir('.grpc-vuex')
             messages,
           }
         })
-        const code = generateCode(params, src_command["endpoint"])
+        const code = generateCode(params, src_command["endpoint"], src_command["isDebugMode"])
         const dtsCode = generateDtsCode(params)
         return external_bluebird_default.a.all([
           writeFile(tempFilePath, code),
@@ -770,6 +789,7 @@ makeDir('.grpc-vuex')
       }),
     external_bluebird_default.a.map([
       ['case.js', case_default.a],
+      ['debug.js', debug_default.a],
       ['grpc.js', grpc_default.a],
       ['request.js', request_default.a],
       ['type.js', type_default.a],
