@@ -8,7 +8,9 @@ export default class GRPC {
     }
   }
   getDeadline(sec = 5) {
-    return (new Date()).setSeconds((new Date()).getSeconds() + sec)
+    const deadline = new Date();
+    deadline.setSeconds(deadline.getSeconds() + sec);
+    return deadline.getTime()
   }
   call({ client, method, req, options }) {
     const cl = new client(this.endpoint)
