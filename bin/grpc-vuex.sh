@@ -196,7 +196,7 @@ module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    t
 /* 14 */
 /***/ (function(module, exports) {
 
-module.exports = "import Case from './case'\nimport Type from './type'\n\nexport function _createObjectRequest (key, value, messages) {\n  const req = new messages[key]()\n  Object.keys(value)\n    .map((key)=>[key, value[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, req, messages)\n    })\n  return req\n}\nexport function _createRequest (key, value, request, messages) {\n  if ( Type.isObject(value) ) {\n    value = _createObjectRequest(key, value, messages)\n  } else if ( Type.isArray(value) ) {\n    value = value.map((value)=>{\n      if ( Type.isObject(value) ) {\n        return _createObjectRequest(key, value, messages)\n      }\n      return value\n    })\n  }\n  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`\n  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)\n  request[setter](value)\n  return request\n}\n\nexport function createRequest (params, Message, messages) {\n  const request = new Message()\n  if ( !params ) return;\n  Object.keys(params)\n    .map((key)=>[key, params[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, request, messages)\n    })\n  return request\n}\n"
+module.exports = "import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb.js'\nimport Case from './case'\nimport Type from './type'\n\nexport function _createObjectRequest (key, value, messages) {\n  const req = new messages[key]()\n  Object.keys(value)\n    .map((key)=>[key, value[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, req, messages)\n    })\n  return req\n}\nexport function _createRequest (key, value, request, messages) {\n  if ( Type.isObject(value) ) {\n    value = _createObjectRequest(key, value, messages)\n  } else if ( Type.isArray(value) ) {\n    value = value.map((value)=>{\n      if ( Type.isObject(value) ) {\n        return _createObjectRequest(key, value, messages)\n      }\n      return value\n    })\n  } else if ( /^\\d{4}-\\d{2}-\\d{2}T\\d{2}\\:\\d{2}\\:\\d{2}\\+\\d{2}\\:\\d{2}$/.test(value) ) {\n    const timestamp = new Timestamp()\n    const seconds = Math.floor((new Date(value)).getTime() / 1000)\n    timestamp.setSeconds(seconds)\n    timestamp.setNanos(0)\n    value = timestamp\n  }\n  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`\n  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)\n  request[setter](value)\n  return request\n}\n\nexport function createRequest (params, Message, messages) {\n  const request = new Message()\n  if ( !params ) return;\n  Object.keys(params)\n    .map((key)=>[key, params[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, request, messages)\n    })\n  return request\n}\n"
 
 /***/ }),
 /* 15 */
@@ -643,6 +643,7 @@ function _generateDtsCode (messages, actions) {
           type = {
             'int32': 'number',
             'int64': 'string',
+            'google.protobuf.Timestamp': 'string',
             'bool': 'boolean',
           }[type] || type
           return {

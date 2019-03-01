@@ -1,9 +1,11 @@
 import _ from 'lodash'
+import moment from 'moment'
 
 import { createRequest } from '../src/request'
 import Helloworld from './grpc/helloworld_pb'
 import fewcollection from './grpc/fewcollection_pb'
 import snakecase from './grpc/snakecase_pb'
+import timestamp from './grpc/timestamp_pb'
 
 describe('createRequest', ()=>{
   it('sets parames', () => {
@@ -18,6 +20,17 @@ describe('createRequest', ()=>{
   })
   it('throws an error if it receives an invalid host', () => {
     expect(()=>createRequest()).toThrow(Error)
+  })
+  it('sets timestamp param', () => {
+    const now = moment()
+    const params = {datetime: now.format()}
+    const req = createRequest(params, timestamp.TimestampRequest)
+    expect(req.toObject()).toEqual({
+      datetime: {
+        nanos: 0,
+        seconds: now.unix(),
+      }
+    })
   })
   it('sets collection parames', () => {
     const params = {

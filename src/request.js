@@ -1,3 +1,4 @@
+import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb.js'
 import Case from './case'
 import Type from './type'
 
@@ -20,6 +21,12 @@ export function _createRequest (key, value, request, messages) {
       }
       return value
     })
+  } else if ( /^\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}\+\d{2}\:\d{2}$/.test(value) ) {
+    const timestamp = new Timestamp()
+    const seconds = Math.floor((new Date(value)).getTime() / 1000)
+    timestamp.setSeconds(seconds)
+    timestamp.setNanos(0)
+    value = timestamp
   }
   const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`
   if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package helloworld;
+import "google/protobuf/timestamp.proto";
+
+service TimestampService {
+  rpc Check (TimestampRequest) returns (TimestampReply);
+}
+
+message TimestampRequest {
+  google.protobuf.Timestamp datetime = 1;
+}
+
+message TimestampReply {
+  google.protobuf.Timestamp datetime = 1;
+}

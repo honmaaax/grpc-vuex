@@ -196,6 +196,7 @@ function _generateDtsCode (messages, actions) {
           type = {
             'int32': 'number',
             'int64': 'string',
+            'google.protobuf.Timestamp': 'string',
             'bool': 'boolean',
           }[type] || type
           return {
