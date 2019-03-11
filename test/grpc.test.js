@@ -69,19 +69,23 @@ describe('call()', ()=>{
 })
 
 describe('error()', ()=>{
+  const mock = jest.fn()
   let grpc;
   beforeAll(()=>{
     grpc = new GRPC(endpoint)
+    grpc.onError = mock
   })
   it('returns an instance', () => {
     return Promise.resolve()
-      .then(()=>grpc.error({code: 123, message: 'hoge'}))
+      .then(()=>grpc.error({code: 123, message: 'hoge'}, {req: {foo: 'bar'}, method: 'getFooBar'}))
       .then(()=>{
         expect(true).toBe(false)
       })
       .catch((err)=>{
         expect(err.code).toBe(123)
         expect(err.message).toBe('hoge')
+        expect(mock).toHaveBeenCalledTimes(1)
+        expect(mock).toBeCalledWith({code: 123, message: 'hoge'}, {foo: 'bar'}, 'getFooBar')
       })
   })
 })

@@ -190,7 +190,7 @@ module.exports = "export function logRequest(method, params) {\n  return console
 /* 13 */
 /***/ (function(module, exports) {
 
-module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    this.defaultOptions = {}\n    if (endpoint) {\n      this.endpoint = endpoint\n    } else {\n      throw new Error('Invalid endpoint')\n    }\n  }\n  getDeadline(sec = 5) {\n    const deadline = new Date();\n    deadline.setSeconds(deadline.getSeconds() + sec);\n    return deadline.getTime()\n  }\n  call({ client, method, req, options }) {\n    const cl = new client(this.endpoint)\n    const opts = Object.assign({}, this.defaultOptions, options)\n    if (!this.defaultOptions.deadline) {\n      opts.deadline = this.getDeadline()\n    }\n    return cl[method](req, opts)\n      .catch(this.error)\n  }\n  error (err) {\n    console.error(err)\n    throw err\n  }\n}\n"
+module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    this.defaultOptions = {}\n    if (endpoint) {\n      this.endpoint = endpoint\n    } else {\n      throw new Error('Invalid endpoint')\n    }\n  }\n  getDeadline(sec = 5) {\n    const deadline = new Date();\n    deadline.setSeconds(deadline.getSeconds() + sec);\n    return deadline.getTime()\n  }\n  call({ client, method, req, options }) {\n    const cl = new client(this.endpoint)\n    const opts = Object.assign({}, this.defaultOptions, options)\n    if (!this.defaultOptions.deadline) {\n      opts.deadline = this.getDeadline()\n    }\n    return cl[method](req, opts)\n      .catch((err)=>this.error(err, { method, req }))\n  }\n  error (err, { method, req }) {\n    return Promise.resolve()\n      .then(()=>{\n        if (this.onError) return this.onError(err, req, method)\n      })\n      .then(()=>{\n        console.error(err)\n        throw err\n      })\n  }\n}\n"
 
 /***/ }),
 /* 14 */
@@ -679,7 +679,8 @@ function generateDtsCode(params) {
   constructor(endpoint:string);
   getDeadline(sec:number);
   call(arr:{ client:string, method:string, req:object, options:object });
-  error (err:Error);
+  error( err:Error, info:{ method:string, req:object } );
+  onError( err:Error, req:object, method:string );
 }
 export var grpc:GRPC;
 

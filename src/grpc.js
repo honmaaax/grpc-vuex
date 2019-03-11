@@ -19,10 +19,16 @@ export default class GRPC {
       opts.deadline = this.getDeadline()
     }
     return cl[method](req, opts)
-      .catch(this.error)
+      .catch((err)=>this.error(err, { method, req }))
   }
-  error (err) {
-    console.error(err)
-    throw err
+  error (err, { method, req }) {
+    return Promise.resolve()
+      .then(()=>{
+        if (this.onError) return this.onError(err, req, method)
+      })
+      .then(()=>{
+        console.error(err)
+        throw err
+      })
   }
 }

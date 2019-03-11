@@ -372,7 +372,8 @@ describe('generateDtsCode', ()=>{
   constructor(endpoint:string);
   getDeadline(sec:number);
   call(arr:{ client:string, method:string, req:object, options:object });
-  error (err:Error);
+  error( err:Error, info:{ method:string, req:object } );
+  onError( err:Error, req:object, method:string );
 }
 export var grpc:GRPC;
 
@@ -411,7 +412,8 @@ export function sayHello(arg:ActionArgument<HelloRequest>):Promise<HelloReply>;`
   constructor(endpoint:string);
   getDeadline(sec:number);
   call(arr:{ client:string, method:string, req:object, options:object });
-  error (err:Error);
+  error( err:Error, info:{ method:string, req:object } );
+  onError( err:Error, req:object, method:string );
 }
 export var grpc:GRPC;
 
@@ -482,7 +484,8 @@ export function sayHello(arg:ActionArgument<HelloRequest>):Promise<HelloReply>;`
   constructor(endpoint:string);
   getDeadline(sec:number);
   call(arr:{ client:string, method:string, req:object, options:object });
-  error (err:Error);
+  error( err:Error, info:{ method:string, req:object } );
+  onError( err:Error, req:object, method:string );
 }
 export var grpc:GRPC;
 
