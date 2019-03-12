@@ -3,19 +3,17 @@ export default class GRPC {
     this.defaultOptions = {}
     if (endpoint) {
       this.endpoint = endpoint
-    } else {
-      throw new Error('Invalid endpoint')
     }
   }
-  getDeadline(sec = 5) {
+  getDeadline(sec = 30) {
     const deadline = new Date();
     deadline.setSeconds(deadline.getSeconds() + sec);
-    return deadline.getTime()
+    return deadline.getTime().toString()
   }
   call({ client, method, req, options }) {
     const cl = new client(this.endpoint)
     const opts = Object.assign({}, this.defaultOptions, options)
-    if (!this.defaultOptions.deadline) {
+    if (!opts.deadline) {
       opts.deadline = this.getDeadline()
     }
     return cl[method](req, opts)

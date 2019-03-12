@@ -229,7 +229,7 @@ export function generateDtsCode(params) {
   const grpcClass = `class GRPC {
   endpoint:string;
   defaultOptions:object;
-  constructor(endpoint:string);
+  constructor(endpoint?:string);
   getDeadline(sec:number);
   call(arr:{ client:string, method:string, req:object, options:object });
   error( err:Error, info:{ method:string, req:object } );

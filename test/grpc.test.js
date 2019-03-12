@@ -36,10 +36,14 @@ const proto = `
 
 describe('constructor', ()=>{
   it('returns an instance', () => {
-    expect(new GRPC(endpoint)).toBeInstanceOf(GRPC)
+    const instance = new GRPC(endpoint)
+    expect(instance).toBeInstanceOf(GRPC)
+    instance.endpoint = endpoint
+    expect(instance.endpoint).toBe(endpoint)
   })
-  it('throws an error if it receives an invalid endpoint', () => {
-    expect(()=>new GRPC()).toThrow(Error)
+  it('returns an instance that has an endpoint', () => {
+    const instance = new GRPC(endpoint)
+    expect(instance.endpoint).toBe(endpoint)
   })
 })
 
