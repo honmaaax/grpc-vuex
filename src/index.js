@@ -35,6 +35,7 @@ import caseJsCode from 'raw-loader!./case'
 import debugJsCode from 'raw-loader!./debug'
 import grpcJsCode from 'raw-loader!./grpc'
 import requestJsCode from 'raw-loader!./request'
+import responseJsCode from 'raw-loader!./response'
 import typeJsCode from 'raw-loader!./type'
 
 const dirPath = '.grpc-vuex'
@@ -89,6 +90,7 @@ makeDir('.grpc-vuex')
       ['debug.js', debugJsCode],
       ['grpc.js', grpcJsCode],
       ['request.js', requestJsCode],
+      ['response.js', responseJsCode],
       ['type.js', typeJsCode],
     ], ([ srcPath, code ])=>writeFile(path.resolve(dirPath, srcPath), code)),
   ]))

@@ -82,7 +82,7 @@
 /******/
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 17);
+/******/ 	return __webpack_require__(__webpack_require__.s = 18);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -113,7 +113,7 @@ module.exports = require("fs");
 /* 4 */
 /***/ (function(module, exports, __webpack_require__) {
 
-const program = __webpack_require__(16)
+const program = __webpack_require__(17)
 
 program
   .usage('<output_file_path> <proto_file_paths ...>')
@@ -196,22 +196,28 @@ module.exports = "export default class GRPC {\n  constructor (endpoint) {\n    t
 /* 14 */
 /***/ (function(module, exports) {
 
-module.exports = "import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb.js'\nimport Case from './case'\nimport Type from './type'\n\nexport function _createObjectRequest (key, value, messages) {\n  const req = new messages[key]()\n  Object.keys(value)\n    .map((key)=>[key, value[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, req, messages)\n    })\n  return req\n}\nexport function _createRequest (key, value, request, messages) {\n  if ( Type.isObject(value) ) {\n    value = _createObjectRequest(key, value, messages)\n  } else if ( Type.isArray(value) ) {\n    value = value.map((value)=>{\n      if ( Type.isObject(value) ) {\n        return _createObjectRequest(key, value, messages)\n      }\n      return value\n    })\n  } else if ( /^\\d{4}-\\d{2}-\\d{2}T\\d{2}\\:\\d{2}\\:\\d{2}\\+\\d{2}\\:\\d{2}$/.test(value) ) {\n    const timestamp = new Timestamp()\n    const seconds = Math.floor((new Date(value)).getTime() / 1000)\n    timestamp.setSeconds(seconds)\n    timestamp.setNanos(0)\n    value = timestamp\n  }\n  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`\n  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)\n  request[setter](value)\n  return request\n}\n\nexport function createRequest (params, Message, messages) {\n  const request = new Message()\n  if ( !params ) return;\n  Object.keys(params)\n    .map((key)=>[key, params[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, request, messages)\n    })\n  return request\n}\n"
+module.exports = "import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb.js'\nimport Case from './case'\nimport Type from './type'\n\nexport function _createObjectRequest (key, value, messages) {\n  const req = new messages[key]()\n  Object.keys(value)\n    .map((key)=>[key, value[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, req, messages)\n    })\n  return req\n}\nexport function _createRequest (key, value, request, messages) {\n  if ( Type.isObject(value) ) {\n    value = _createObjectRequest(key, value, messages)\n  } else if ( Type.isArray(value) ) {\n    value = value.map((value)=>{\n      if ( Type.isObject(value) ) {\n        return _createObjectRequest(key, value, messages)\n      }\n      return value\n    })\n  } else if ( /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}\\:\\d{2}\\:\\d{2}\\+\\d{2}\\:\\d{2})|(\\d{4}-\\d{2}-\\d{2}T\\d{2}\\:\\d{2}\\:\\d{2}\\.\\d{3}Z)$/.test(value) ) {\n    const timestamp = new Timestamp()\n    const seconds = Math.floor((new Date(value)).getTime() / 1000)\n    timestamp.setSeconds(seconds)\n    timestamp.setNanos(0)\n    value = timestamp\n  }\n  const setter = `set${Case.pascal(key)}${Array.isArray(value) ? 'List' : ''}`\n  if (!request[setter]) throw new Error(`Invalid request parameters. '${key}'`)\n  request[setter](value)\n  return request\n}\n\nexport function createRequest (params, Message, messages) {\n  const request = new Message()\n  if ( !params ) return;\n  Object.keys(params)\n    .map((key)=>[key, params[key]])\n    .forEach(([key, value])=>{\n      _createRequest(key, value, request, messages)\n    })\n  return request\n}\n"
 
 /***/ }),
 /* 15 */
 /***/ (function(module, exports) {
 
-module.exports = "const Type = {\n  isArray (item) {\n    return Object.prototype.toString.call(item) === '[object Array]'\n  },\n  isObject (item) {\n    return typeof item === 'object' && item !== null && !Type.isArray(item)\n  },\n}\nexport default Type\n"
+module.exports = "export function stringifyGoogleTimestamp (googleTimestamp = {}) {\n  return new Date((googleTimestamp.seconds || 0) * 1000).toISOString()\n}\n\nexport function convertResponse (data) {\n  if ( Array.isArray(data) ) {\n    return data.map(convertResponse)\n  } else if ( typeof data === 'object' && data !== null ) {\n    if ( data.hasOwnProperty('nanos') && data.hasOwnProperty('seconds') ) {\n      return stringifyGoogleTimestamp(data)\n    } else {\n      return Object.keys(data).reduce((result, key)=>{\n        return Object.assign({}, result, {[key]: convertResponse(data[key])})\n      }, {})\n    }\n  } else {\n    return data\n  }\n}"
 
 /***/ }),
 /* 16 */
 /***/ (function(module, exports) {
 
-module.exports = require("commander");
+module.exports = "const Type = {\n  isArray (item) {\n    return Object.prototype.toString.call(item) === '[object Array]'\n  },\n  isObject (item) {\n    return typeof item === 'object' && item !== null && !Type.isArray(item)\n  },\n}\nexport default Type\n"
 
 /***/ }),
 /* 17 */
+/***/ (function(module, exports) {
+
+module.exports = require("commander");
+
+/***/ }),
+/* 18 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -535,6 +541,7 @@ function generateImportCode (messageProtos, clientProtos) {
   return `import GRPC from './grpc'
 import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
+import { convertResponse } from './response'
 ${messageProtos.map((protoName)=>`import ${protoName} from './${protoName}_pb'`).join('\n')}
 ${clientProtos.map(({ protoName, client })=>`import { ${client} } from './${protoName}_grpc_web_pb'`).join('\n')}`
 }
@@ -583,7 +590,7 @@ function generateActionsCode (params, isDebugMode) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()${isDebugMode ? `
+      const res = convertResponse(raw.toObject())${isDebugMode ? `
       logResponse('${method}', JSON.parse(JSON.stringify(res)))` : ''}
       if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
@@ -721,11 +728,16 @@ var grpc_default = /*#__PURE__*/__webpack_require__.n(grpc);
 var request = __webpack_require__(14);
 var request_default = /*#__PURE__*/__webpack_require__.n(request);
 
+// EXTERNAL MODULE: ./node_modules/raw-loader!./src/response.js
+var raw_loader_src_response = __webpack_require__(15);
+var response_default = /*#__PURE__*/__webpack_require__.n(raw_loader_src_response);
+
 // EXTERNAL MODULE: ./node_modules/raw-loader!./src/type.js
-var type = __webpack_require__(15);
+var type = __webpack_require__(16);
 var type_default = /*#__PURE__*/__webpack_require__.n(type);
 
 // CONCATENATED MODULE: ./src/index.js
+
 
 
 
@@ -794,6 +806,7 @@ makeDir('.grpc-vuex')
       ['debug.js', debug_default.a],
       ['grpc.js', grpc_default.a],
       ['request.js', request_default.a],
+      ['response.js', response_default.a],
       ['type.js', type_default.a],
     ], ([ srcPath, code ])=>writeFile(external_path_default.a.resolve(src_dirPath, srcPath), code)),
   ]))

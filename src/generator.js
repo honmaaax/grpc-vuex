@@ -88,6 +88,7 @@ export function generateImportCode (messageProtos, clientProtos) {
   return `import GRPC from './grpc'
 import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
+import { convertResponse } from './response'
 ${messageProtos.map((protoName)=>`import ${protoName} from './${protoName}_pb'`).join('\n')}
 ${clientProtos.map(({ protoName, client })=>`import { ${client} } from './${protoName}_grpc_web_pb'`).join('\n')}`
 }
@@ -136,7 +137,7 @@ export function generateActionsCode (params, isDebugMode) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()${isDebugMode ? `
+      const res = convertResponse(raw.toObject())${isDebugMode ? `
       logResponse('${method}', JSON.parse(JSON.stringify(res)))` : ''}
       if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res

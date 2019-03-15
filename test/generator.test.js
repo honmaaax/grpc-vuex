@@ -137,6 +137,7 @@ describe('generateImportCode', ()=>{
 `import GRPC from './grpc'
 import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
+import { convertResponse } from './response'
 import helloworld from './helloworld_pb'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'`
     )
@@ -195,7 +196,7 @@ describe('generateActionsCode', ()=>{
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()
+      const res = convertResponse(raw.toObject())
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -210,7 +211,7 @@ export function sayHello (context, arg) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()
+      const res = convertResponse(raw.toObject())
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -243,6 +244,7 @@ describe('generateCode', ()=>{
 `import GRPC from './grpc'
 import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
+import { convertResponse } from './response'
 import helloworld from './helloworld_pb'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
 
@@ -262,7 +264,7 @@ export function sayHello (context, arg) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()
+      const res = convertResponse(raw.toObject())
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -277,7 +279,7 @@ export function sayHello (context, arg) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()
+      const res = convertResponse(raw.toObject())
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
     })
@@ -303,6 +305,7 @@ export function sayHello (context, arg) {
 `import GRPC from './grpc'
 import { logRequest, logResponse, logError } from './debug'
 import { createRequest } from './request'
+import { convertResponse } from './response'
 import helloworld from './helloworld_pb'
 import { GreeterPromiseClient } from './helloworld_grpc_web_pb'
 
@@ -323,7 +326,7 @@ export function sayHello (context, arg) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()
+      const res = convertResponse(raw.toObject())
       logResponse('sayHello', JSON.parse(JSON.stringify(res)))
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res
@@ -344,7 +347,7 @@ export function sayHello (context, arg) {
       options: arg.options,
     })
     .then((raw)=>{
-      const res = raw.toObject()
+      const res = convertResponse(raw.toObject())
       logResponse('sayHello', JSON.parse(JSON.stringify(res)))
       if (arg.hasMutation) context.commit(types.GREETER_SAYHELLO, res)
       return res

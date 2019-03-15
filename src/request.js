@@ -21,7 +21,7 @@ export function _createRequest (key, value, request, messages) {
       }
       return value
     })
-  } else if ( /^\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}\+\d{2}\:\d{2}$/.test(value) ) {
+  } else if ( /^(\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}\+\d{2}\:\d{2})|(\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}\.\d{3}Z)$/.test(value) ) {
     const timestamp = new Timestamp()
     const seconds = Math.floor((new Date(value)).getTime() / 1000)
     timestamp.setSeconds(seconds)
