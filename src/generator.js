@@ -134,7 +134,8 @@ export function generateActionsCode (params, isDebugMode) {
       client: ${client},
       method: '${method}',
       req,
-      options: arg.options,
+      options: arg.options,${params ? `
+      params: arg.params,` : ''}
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())${isDebugMode ? `

@@ -194,6 +194,7 @@ describe('generateActionsCode', ()=>{
       method: 'sayHello',
       req,
       options: arg.options,
+      params: arg.params,
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())
@@ -209,6 +210,7 @@ export function sayHello (context, arg) {
       method: 'sayHello',
       req,
       options: arg.options,
+      params: arg.params,
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())
@@ -262,6 +264,7 @@ export function sayHello (context, arg) {
       method: 'sayHello',
       req,
       options: arg.options,
+      params: arg.params,
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())
@@ -277,6 +280,7 @@ export function sayHello (context, arg) {
       method: 'sayHello',
       req,
       options: arg.options,
+      params: arg.params,
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())
@@ -324,6 +328,7 @@ export function sayHello (context, arg) {
       method: 'sayHello',
       req,
       options: arg.options,
+      params: arg.params,
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())
@@ -345,6 +350,7 @@ export function sayHello (context, arg) {
       method: 'sayHello',
       req,
       options: arg.options,
+      params: arg.params,
     })
     .then((raw)=>{
       const res = convertResponse(raw.toObject())
