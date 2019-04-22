@@ -7,7 +7,6 @@ import {
   outputFilePath,
   protoFilePaths,
   endpoint,
-  isDebugMode,
 } from './command'
 import {
   readFile,
@@ -72,7 +71,7 @@ makeDir('.grpc-vuex')
             messages,
           }
         })
-        const code = generateCode(params, endpoint, isDebugMode)
+        const code = generateCode(params, endpoint)
         const dtsCode = generateDtsCode(params)
         return Promise.all([
           writeFile(tempFilePath, code),

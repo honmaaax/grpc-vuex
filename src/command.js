@@ -17,7 +17,6 @@ const results = {
   outputFilePath,
   protoFilePaths,
   endpoint: program.endpoint || 'http://localhost:8080',
-  isDebugMode: program.debug,
 }
 if (program.debug) console.log(results)
 module.exports = results

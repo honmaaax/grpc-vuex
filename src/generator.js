@@ -121,31 +121,32 @@ export function generateRequestCode (protoName, message, models) {
   return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${stringifiedModels}})`
 }
 
-export function generateActionsCode (params, isDebugMode) {
+export function generateActionsCode (params) {
   return _.chain(params)
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
   if (!arg) arg = {}
-  ${generateRequestCode(protoName, message, models)}${isDebugMode ? `
-  logRequest('${method}', arg.params)` : ''}
+  ${generateRequestCode(protoName, message, models)}
+  ${`if(grpc.isDebugMode) logRequest('${method}', arg.params)`}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
-      options: arg.options,
+      options: arg.options,${params ? `
+      params: arg.params,` : ''}
     })
     .then((raw)=>{
-      const res = convertResponse(raw.toObject())${isDebugMode ? `
-      logResponse('${method}', JSON.parse(JSON.stringify(res)))` : ''}
+      const res = convertResponse(raw.toObject())
+      ${`if(grpc.isDebugMode) logResponse('${method}', JSON.parse(JSON.stringify(res)))`}
       if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
-    })${isDebugMode ? `
+    })${`
     .catch((err)=>{
       logError('${method}', err)
       throw err
-    })` : ''}
+    })`}
 }`
       )
     })
@@ -154,7 +155,7 @@ export function generateActionsCode (params, isDebugMode) {
     .value()
 }
 
-export function generateCode (params, endpoint, isDebugMode) {
+export function generateCode (params, endpoint) {
   const mutationTypes = _.chain(params)
     .map('mutationTypes')
     .compact()
@@ -183,7 +184,7 @@ export function generateCode (params, endpoint, isDebugMode) {
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(params, isDebugMode)}
+${generateActionsCode(params)}
 `
 }
 

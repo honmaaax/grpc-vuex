@@ -132,7 +132,6 @@ const results = {
   outputFilePath,
   protoFilePaths,
   endpoint: program.endpoint || 'http://localhost:8080',
-  isDebugMode: program.debug,
 }
 if (program.debug) console.log(results)
 module.exports = results
@@ -574,31 +573,32 @@ function generateRequestCode (protoName, message, models) {
   return `const req = createRequest(arg.params || {}, ${protoName}.${message}, {${stringifiedModels}})`
 }
 
-function generateActionsCode (params, isDebugMode) {
+function generateActionsCode (params) {
   return external_lodash_default.a.chain(params)
     .filter('actions')
     .map(({ actions, models })=>{
       return actions.map(({ protoName, name, client, method, message, mutationType })=>
 `export function ${name} (context, arg) {
   if (!arg) arg = {}
-  ${generateRequestCode(protoName, message, models)}${isDebugMode ? `
-  logRequest('${method}', arg.params)` : ''}
+  ${generateRequestCode(protoName, message, models)}
+  ${`if(grpc.isDebugMode) logRequest('${method}', arg.params)`}
   return grpc.call({
       client: ${client},
       method: '${method}',
       req,
-      options: arg.options,
+      options: arg.options,${params ? `
+      params: arg.params,` : ''}
     })
     .then((raw)=>{
-      const res = convertResponse(raw.toObject())${isDebugMode ? `
-      logResponse('${method}', JSON.parse(JSON.stringify(res)))` : ''}
+      const res = convertResponse(raw.toObject())
+      ${`if(grpc.isDebugMode) logResponse('${method}', JSON.parse(JSON.stringify(res)))`}
       if (arg.hasMutation) context.commit(types.${mutationType}, res)
       return res
-    })${isDebugMode ? `
+    })${`
     .catch((err)=>{
       logError('${method}', err)
       throw err
-    })` : ''}
+    })`}
 }`
       )
     })
@@ -607,7 +607,7 @@ function generateActionsCode (params, isDebugMode) {
     .value()
 }
 
-function generateCode (params, endpoint, isDebugMode) {
+function generateCode (params, endpoint) {
   const mutationTypes = external_lodash_default.a.chain(params)
     .map('mutationTypes')
     .compact()
@@ -636,7 +636,7 @@ function generateCode (params, endpoint, isDebugMode) {
 ${generateMutationTypesCode(mutationTypes)}
 
 ${generateInitGrpcCode(endpoint)}
-${generateActionsCode(params, isDebugMode)}
+${generateActionsCode(params)}
 `
 }
 
@@ -788,7 +788,7 @@ makeDir('.grpc-vuex')
             messages,
           }
         })
-        const code = generateCode(params, src_command["endpoint"], src_command["isDebugMode"])
+        const code = generateCode(params, src_command["endpoint"])
         const dtsCode = generateDtsCode(params)
         return external_bluebird_default.a.all([
           writeFile(tempFilePath, code),
