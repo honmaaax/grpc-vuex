@@ -10,19 +10,23 @@ export default class GRPC {
     deadline.setSeconds(deadline.getSeconds() + sec);
     return deadline.getTime().toString()
   }
-  call({ client, method, req, options }) {
+  call({ client, method, req, options, params }) {
     const cl = new client(this.endpoint)
     const opts = Object.assign({}, this.defaultOptions, options)
     if (!opts.deadline) {
       opts.deadline = this.getDeadline()
     }
-    return cl[method](req, opts)
-      .catch((err)=>this.error(err, { method, req }))
-  }
-  error (err, { method, req }) {
     return Promise.resolve()
       .then(()=>{
-        if (this.onError) return this.onError(err, req, method)
+        if (this.before) return this.before()
+      })
+      .then(()=>cl[method](req, opts))
+      .catch((err)=>this.error(err, { method, params }))
+  }
+  error (err, { method, params }) {
+    return Promise.resolve()
+      .then(()=>{
+        if (this.onError) return this.onError(err, params, method)
       })
       .then(()=>{
         console.error(err)

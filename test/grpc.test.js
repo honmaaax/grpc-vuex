@@ -70,6 +70,47 @@ describe('call()', ()=>{
     expect(_.get(result, 'then')).toBeTruthy()
     expect(_.isFunction(result.then)).toBeTruthy()
   })
+  it('runs the before method before the call', () => {
+    const req = new helloworld.HelloRequest()
+    const users = [0].map(()=>{
+      const r = new helloworld.User()
+      r.setName('puyo')
+      r.setAge(999)
+      r.setChildrenList(['uuu'])
+      return r
+    })
+    req.setUsersList(users)
+    grpc.before = jest.fn()
+    grpc.call({
+      client: GreeterPromiseClient,
+      method: 'sayHello',
+      req,
+    })
+    .then(()=>{
+      expect(grpc.before).toHaveBeenCalledTimes(1)
+    })
+  })
+  it('catchs the error before the call', () => {
+    const req = new helloworld.HelloRequest()
+    const users = [0].map(()=>{
+      const r = new helloworld.User()
+      r.setName('puyo')
+      r.setAge(999)
+      r.setChildrenList(['uuu'])
+      return r
+    })
+    req.setUsersList(users)
+    grpc.before = jest.fn()
+    grpc.before.mockReturnValue(42)
+    grpc.call({
+      client: GreeterPromiseClient,
+      method: 'sayHello',
+      req,
+    })
+    .then(()=>{
+      expect(grpc.before).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
 describe('error()', ()=>{
@@ -81,7 +122,7 @@ describe('error()', ()=>{
   })
   it('returns an instance', () => {
     return Promise.resolve()
-      .then(()=>grpc.error({code: 123, message: 'hoge'}, {req: {foo: 'bar'}, method: 'getFooBar'}))
+      .then(()=>grpc.error({code: 123, message: 'hoge'}, {params: {foo: 'bar'}, method: 'getFooBar'}))
       .then(()=>{
         expect(true).toBe(false)
       })
