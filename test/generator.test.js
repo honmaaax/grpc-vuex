@@ -48,6 +48,24 @@ const proto = `
   }
 `
 
+const proto2 = `
+  syntax = "proto3";
+
+  package assetter;
+
+  option go_package = "assetter";
+
+  service PingService {
+    rpc SendPing (PingRequest) returns (PingResponse) {}
+  }
+
+  message PingRequest {}
+
+  message PingResponse {
+    string message = 1;
+  }
+`
+
 describe('generateFileByProtoc', ()=>{
   beforeAll(()=>{
     const dirPath = '.grpc-vuex'
@@ -360,6 +378,59 @@ export function sayHello (context, arg) {
     })
     .catch((err)=>{
       logError('sayHello', err)
+      throw err
+    })
+}
+`
+    )
+  })
+  it('returns valid js code when simple proto', () => {
+    const protoName = 'ping'
+    const json = toJSON(proto2)
+    const services = getServices(json)
+    const messages = getMessages(json)
+    const models = getModels(messages, protoName)
+    const mutationTypes = getMutationTypes(services)
+    const actions = getActions(services, protoName)
+    const param = {
+      mutationTypes,
+      actions,
+      models,
+    }
+    const code = generateCode([param], 'http://localhost:8080/', true)
+    expect(_.isString(code)).toBeTruthy()
+    expect(code).toBe(
+`import GRPC from './grpc'
+import { logRequest, logResponse, logError } from './debug'
+import { createRequest } from './request'
+import { convertResponse } from './response'
+import ping from './ping_pb'
+import { PingServicePromiseClient } from './ping_grpc_web_pb'
+
+export const types = {
+  PINGSERVICE_SENDPING: 'PINGSERVICE_SENDPING',
+}
+
+export const grpc = new GRPC('http://localhost:8080/')
+export function sendPing (context, arg) {
+  if (!arg) arg = {}
+  const req = createRequest(arg.params || {}, ping.PingRequest, {})
+  logRequest('sendPing', arg.params)
+  return grpc.call({
+      client: PingServicePromiseClient,
+      method: 'sendPing',
+      req,
+      options: arg.options,
+      params: arg.params,
+    })
+    .then((raw)=>{
+      const res = convertResponse(raw.toObject())
+      logResponse('sendPing', JSON.parse(JSON.stringify(res)))
+      if (arg.hasMutation) context.commit(types.PINGSERVICE_SENDPING, res)
+      return res
+    })
+    .catch((err)=>{
+      logError('sendPing', err)
       throw err
     })
 }

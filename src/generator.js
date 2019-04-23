@@ -167,6 +167,7 @@ export function generateCode (params, endpoint, isDebugMode) {
       .map('namespace')
       .value()
     )
+    .concat(_.map(params, ({ actions })=>_.map(actions, 'protoName')))
     .flattenDeep()
     .uniq()
     .value()

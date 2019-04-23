@@ -620,6 +620,7 @@ function generateCode (params, endpoint, isDebugMode) {
       .map('namespace')
       .value()
     )
+    .concat(external_lodash_default.a.map(params, ({ actions })=>external_lodash_default.a.map(actions, 'protoName')))
     .flattenDeep()
     .uniq()
     .value()
