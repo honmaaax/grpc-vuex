@@ -20,7 +20,12 @@ export default class GRPC {
       .then(()=>{
         if (this.before) return this.before()
       })
-      .then(()=>cl[method](req, opts))
+      .then(() => {
+        const enableDevTools = window.__GRPCWEB_DEVTOOLS__ || (() => { })
+        enableDevTools([cl.delegateClient_])
+
+        return cl[method](req, opts)
+      })
       .catch((err)=>this.error(err, { method, params }))
   }
   error (err, { method, params }) {
